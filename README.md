@@ -1,14 +1,9 @@
-# v8-gearbox
-This is v8-gearbox, a new shell for the v8 JavaScript Engine.
+# gearbox-node
+This project is based on [v8-gearbox](https://github.com/eddyb/v8-gearbox) and aiming at reproducing node.js' API while keeping the gearbox internals. 
 
 ## Install Instructions
 
-You need scons, and various other libraries.
+You need scons.
 
-To build v8-gearbox, just type `scons`.
+To build gearbox-node, just type `scons`.
 To install it, type `scons install`.
-
-## Examples
-
-In the `samples` directory, you'll find some code samples, mostly
-tests for various modules.
