@@ -12,16 +12,6 @@ if int(crossmingw):
 
 # Windows gets special treatement
 if sys.platform == 'win32' or env['USING_CROSSMINGW']:
-    if not os.path.exists('contrib'):
-        print ""
-        print "============================================================================="
-        print "For building v8-gearbox on windows you need to make a directory named contrib"
-        print "and put the following in there: v8 (you need to build it yourself), readline,"
-        print "freeglut, pdcurses, mysql-connector-c and SDL. Also you can only use MinGW to"
-        print "build v8-gearbox. Have a nice day :)"
-        print "============================================================================="
-        print ""
-        sys.exit(1)
     env.Append(CPPPATH = Glob(os.path.join('#contrib', '*', 'include')))
     env.Append(CPPPATH = Glob(os.path.join('#contrib', '*')))
     env.Append(CPPPATH = '#src')
@@ -30,28 +20,12 @@ if sys.platform == 'win32' or env['USING_CROSSMINGW']:
     env.Append(LIBPATH = Glob(os.path.join('#contrib', '*')))
     env.Append(LINKFLAGS = '-static-libgcc -static-libstdc++')
     env.Append(CXXFLAGS = '-std=c++0x -O3 -fno-var-tracking-assignments')
-    env.Append(LIBS = ['v8', 'readline', 'opengl32', 'glu32', 'freeglut', 'curses', 'pthread', 'mysql', 'ws2_32' , 'winmm', 'SDL', 'SDLmain'])
+    env.Append(LIBS = ['v8', 'readline', 'pthread', 'ws2_32' , 'winmm'])
 else:
-    env.ParseConfig('mysql_config --cflags --libs')
-    env.ParseConfig('pkg-config --cflags --libs gl')
-    env.ParseConfig('pkg-config --cflags --libs eina')
-    env.ParseConfig('pkg-config --cflags --libs eet')
-    env.ParseConfig('pkg-config --cflags --libs evas')
-    env.ParseConfig('pkg-config --cflags --libs ecore')
-    env.ParseConfig('pkg-config --cflags --libs ecore-evas')
-    env.ParseConfig('pkg-config --cflags --libs ecore-file')
-    env.ParseConfig('pkg-config --cflags --libs ecore-imf')
-    env.ParseConfig('pkg-config --cflags --libs ecore-con')
-    env.ParseConfig('pkg-config --cflags --libs edje')
-    env.ParseConfig('pkg-config --cflags --libs edbus')
-    env.ParseConfig('pkg-config --cflags --libs efreet')
-    env.ParseConfig('pkg-config --cflags --libs efreet-mime')
-    env.ParseConfig('pkg-config --cflags --libs efreet-trash')
-    env.ParseConfig('pkg-config --cflags --libs elementary')
     env.Append(CPPPATH = '#src')
     env.Append(LINKFLAGS = '-Wl,--no-warn-search-mismatch')
     env.Append(CXXFLAGS = '-std=c++0x -O3 -fno-var-tracking-assignments')
-    env.Append(LIBS = ['v8', 'readline', 'GL', 'GLU', 'glut', 'SDL', 'tinfo', 'ncurses'])
+    env.Append(LIBS = ['v8', 'readline'])
 
 # Pretty output
 if sys.platform == 'win32' or not hasattr(os.environ, 'TERM') or os.environ['TERM'] == 'dumb':
