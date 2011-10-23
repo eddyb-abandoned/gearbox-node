@@ -1,18 +1,23 @@
-/*
- * Copyright (c) 2011 Eduard Burtescu
- *
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITRTLSS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, RTLGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONRTLCTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- */
+// Copyright (c) 2011 the gearbox-node project authors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <gearbox.h>
 #include "Network.h"
@@ -35,7 +40,7 @@ using namespace Gearbox;
 static v8::Handle<v8::Value> _Network_Socket_Socket(const v8::Arguments &args) {
     Value This(args.This());
     if(args.Length() >= 2) {
-        #line 38 "src/modules/Network.gear"
+        #line 43 "src/modules/Network.gear"
         Value family(args[0]), type(args[1]);
         int sock = socket(family, type, 0);
         if(sock == -1)
@@ -52,7 +57,7 @@ static v8::Handle<v8::Value> _Network_Socket_Socket(const v8::Arguments &args) {
 static v8::Handle<v8::Value> _Network_Socket_connect(const v8::Arguments &args) {
     Value This(args.This());
     if(args.Length() >= 2) {
-        #line 48 "src/modules/Network.gear"
+        #line 53 "src/modules/Network.gear"
         Value host(args[0]), port(args[1]);
         struct hostent *host_s = gethostbyname(host.to<String>());
         if(!host_s)
@@ -75,7 +80,7 @@ static v8::Handle<v8::Value> _Network_Socket_connect(const v8::Arguments &args) 
 
 static v8::Handle<v8::Value> _Network_Socket_receive(const v8::Arguments &args) {
     Value This(args.This());
-    #line 66 "src/modules/Network.gear"
+    #line 71 "src/modules/Network.gear"
     int maxLen = Value(args[0]) == undefined ? 1024 : Value(args[0]).to<int>();
     char *buffer = new char [maxLen];
     int len = recv(This["socket"], buffer, maxLen, 0);
@@ -91,7 +96,7 @@ static v8::Handle<v8::Value> _Network_Socket_receive(const v8::Arguments &args) 
 static v8::Handle<v8::Value> _Network_Socket_send(const v8::Arguments &args) {
     Value This(args.This());
     if(args.Length() >= 1) {
-        #line 77 "src/modules/Network.gear"
+        #line 82 "src/modules/Network.gear"
         Value data(args[0]);
         send(This["socket"], data.to<String>(), data.length(), 0);
         return undefined;
@@ -101,7 +106,7 @@ static v8::Handle<v8::Value> _Network_Socket_send(const v8::Arguments &args) {
 
 static v8::Handle<v8::Value> _Network_Socket_close(const v8::Arguments &args) {
     Value This(args.This());
-    #line 82 "src/modules/Network.gear"
+    #line 87 "src/modules/Network.gear"
     #ifdef _WIN32
     closesocket(This["socket"]);
 #else
@@ -113,7 +118,7 @@ static v8::Handle<v8::Value> _Network_Socket_close(const v8::Arguments &args) {
 static v8::Handle<v8::Value> _Network_Socket_block(const v8::Arguments &args) {
     Value This(args.This());
     if(args.Length() >= 1) {
-        #line 89 "src/modules/Network.gear"
+        #line 94 "src/modules/Network.gear"
         Value blocking(args[0]);
         #ifdef _WIN32
         u_long mode = blocking ? 1 : 0;
@@ -132,12 +137,12 @@ static v8::Handle<v8::Value> _Network_Socket_block(const v8::Arguments &args) {
 }
 
 static v8::Handle<v8::Value> _Network_toString(const v8::Arguments &args) {
-    #line 32 "src/modules/Network.gear"
+    #line 37 "src/modules/Network.gear"
     return String("[module Network]");
 }
 
 
-#line 140 "src/modules/Network.cc"
+#line 145 "src/modules/Network.cc"
 static void _setup_Network(Value _exports) {
     v8::Handle<v8::FunctionTemplate> _Network_Socket = v8::FunctionTemplate::New(_Network_Socket_Socket);
     _Network_Socket->SetClassName(String("Socket"));
