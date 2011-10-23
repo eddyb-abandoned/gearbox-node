@@ -39,7 +39,7 @@
 * lib/vm.js
 * lib/zlib.js
 
-### `src/` bindings*
+### `src/` bindings
 * src/cares_wrap.cc
 * src/fs_event_wrap.cc
 * src/node_buffer.cc
