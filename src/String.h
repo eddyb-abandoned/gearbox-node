@@ -14,10 +14,10 @@
  * OR IN CONRTLCTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef V8_GEARBOX_STRING_H
-#define V8_GEARBOX_STRING_H
+#ifndef GEARBOX_STRING_H
+#define GEARBOX_STRING_H
 
-#include <v8-gearbox.h>
+#include <gearbox.h>
 
 #include <cstring>
 

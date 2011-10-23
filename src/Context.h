@@ -14,10 +14,10 @@
  * OR IN CONRTLCTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef V8_GEARBOX_CONTEXT_H
-#define V8_GEARBOX_CONTEXT_H
+#ifndef GEARBOX_CONTEXT_H
+#define GEARBOX_CONTEXT_H
 
-#include <v8-gearbox.h>
+#include <gearbox.h>
 
 namespace Gearbox {
     class Context {

@@ -14,15 +14,13 @@
  * OR IN CONRTLCTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <v8-gearbox.h>
+#include <gearbox.h>
 #include <modules/Io.h>
 
 using namespace Gearbox;
 using namespace Modules;
 
 std::function<void()> Gearbox::g_pMainLoop;
-
-#ifndef GEARBOX_APACHE_MOD
 
 #include <cstdlib>
 
@@ -134,54 +132,3 @@ int main(int argc, char* argv[]) {
         shellLoop(context);
     return 0;
 }
-
-#else
-/*
-const char *sFixHttpVar = "function(d){var e={};d.split('&').forEach(function(a){if((a=a.split('='))[0]){var b=decodeURIComponent(a.shift().replace(/\\+/g, '%20')).replace(/\\[\\]$/,'');var c=a.join('=');if(c!=undefined)c=decodeURIComponent(c.replace(/\\+/g, '%20'));if(b in e){if(!Array.isArray(e[b]))e[b]=[e[b]];e[b].push(c)}else e[b]=c}});return e}";
-
-bool RunScript(const char *sScript) {
-    v8::HandleScope handleScope;
-    
-    // Create and enter the context
-    v8::Handle<v8::Context> context = v8::Context::New();
-    v8::Context::Scope context_scope(context);
-    var global = context->Global();
-    
-    // Setup global context
-    SetupGlobal(global);
-    
-    // Empty arguments array
-    global["arguments"] = Array();
-    
-    // HTTP VAR fix function
-    var fixHttpVar = ExecuteString(sFixHttpVar, "");
-    
-    if(g_pRequest && g_pRequest->args())
-        global["GET"] = fixHttpVar(g_pRequest->args());
-    else
-        global["GET"] = Object();
-    
-    if(g_pRequest && g_pRequest->method_number() == M_POST) {
-        ap_setup_client_block(g_pRequest->get_request_rec(), REQUEST_CHUNKED_ERROR);
-        ap_should_client_block(g_pRequest->get_request_rec());
-        size_t nPostBytes = g_pRequest->remaining();
-        char *pPostData = new char[nPostBytes];
-        g_pRequest->get_client_block(pPostData, nPostBytes);
-        global["POST"] = fixHttpVar(String(pPostData, nPostBytes));
-        delete pPostData;
-    }
-    else
-        global["POST"] = Object();
-    
-    // Try to read the file
-    String source = ReadFile(sScript);
-    if(source.empty()) {
-        v8::V8::Dispose();
-        return false;
-    }
-    ExecuteString(source, sScript);
-    v8::V8::Dispose();
-    return true;
-}
-*/
-#endif

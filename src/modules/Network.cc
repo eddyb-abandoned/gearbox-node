@@ -14,7 +14,7 @@
  * OR IN CONRTLCTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <v8-gearbox.h>
+#include <gearbox.h>
 #include "Network.h"
 
 using namespace Gearbox;

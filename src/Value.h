@@ -14,10 +14,10 @@
  * OR IN CONRTLCTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef V8_GEARBOX_VALUE_H
-#define V8_GEARBOX_VALUE_H
+#ifndef GEARBOX_VALUE_H
+#define GEARBOX_VALUE_H
 
-#include <v8-gearbox.h>
+#include <gearbox.h>
 
 namespace Gearbox {
     

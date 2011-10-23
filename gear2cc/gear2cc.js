@@ -311,7 +311,7 @@ function generateCode(global) {
             top = global.top.trim().replace(/\n    /g, '\n') + (global.top.trim()?'\n\n':'\n'),
             header = global.header.trim().replace(/\n    /g, '\n') + (global.header.trim()?'\n\n':'\n');
         var ccCode = license+'\
-#include <v8-gearbox.h>\n\
+#include <gearbox.h>\n\
 #include "'+baseName+'.h"\n\
 \n\
 using namespace Gearbox;\n\
@@ -324,9 +324,9 @@ using namespace Gearbox;\n\
         io.write(gear.cc, ccCode);
         
         var hCode = license+'\
-#ifndef V8_GEARBOX_MODULES_'+baseName.toUpperCase()+'_H\n\
-#define V8_GEARBOX_MODULES_'+baseName.toUpperCase()+'_H\n\n\
-#include <v8-gearbox.h>\n\n'+header+
+#ifndef GEARBOX_MODULES_'+baseName.toUpperCase()+'_H\n\
+#define GEARBOX_MODULES_'+baseName.toUpperCase()+'_H\n\n\
+#include <gearbox.h>\n\n'+header+
 //void Setup'+baseName+'(v8::Handle<v8::Object> global);\n\n\
 '#endif\n';
         io.write(gear.h, hCode);
@@ -341,4 +341,4 @@ if(arguments.length == 2)
     generateCode(createObject('', $aze.parse(io.read(gear.gear)), 1));
 else
     print('Usage: ' + arguments[0] + ' <file>');
-exit(); // Just in case v8-gearbox is a (bit) broken
+exit(); // Just in case gearbox-node is a (bit) broken
