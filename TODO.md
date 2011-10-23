@@ -1,6 +1,7 @@
 # Conversion progress from [node](https://github.com/joyent/node):
 
 ## Pending
+
 ### `lib/*.js` native modules
 * lib/assert.js
 * lib/buffer_ieee754.js
@@ -37,7 +38,8 @@
 * lib/util.js
 * lib/vm.js
 * lib/zlib.js
-# ## `src/` bindings*
+
+### `src/` bindings*
 * src/cares_wrap.cc
 * src/fs_event_wrap.cc
 * src/node_buffer.cc
