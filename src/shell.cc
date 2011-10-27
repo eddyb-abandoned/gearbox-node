@@ -29,47 +29,6 @@ std::function<void()> Gearbox::g_pMainLoop;
 
 #include <cstdlib>
 
-#include <readline/readline.h>
-#include <readline/history.h>
-
-#define GEARBOX_HISTORY_FILE "/.gearbox_history"
-
-void shellLoop(Context &context) {
-    TryCatch tryCatch;
-    
-    // Read the history records prior to starting this shell
-    String historyFile = String::concat(std::getenv("HOME"), GEARBOX_HISTORY_FILE);
-    read_history(historyFile);
-    
-    printf("v8-gearbox [v8 version %s]" _STR_NEWLINE, v8::V8::GetVersion());
-    
-    while(true) {
-        // Read a line from the user
-        String line = readline("gearbox> ");
-        
-        // Ignore empty lines
-        if(line.empty() || !line.length())
-            continue;
-        
-        // Add the line to the history only if it's different to the line before it
-        HIST_ENTRY *lastEntry = history_get(history_length);
-        if(!lastEntry || strcmp(line, lastEntry->line)) {
-            add_history(line);
-            append_history(1, historyFile);
-        }
-        
-        // Execute the expression
-        var result = context.runScript(line, "(shell)");
-        
-        // Check for exceptions
-        if(tryCatch.hasCaught())
-            tryCatch.reportException();
-        else
-            printf("%s" _STR_NEWLINE, *result.to<String>());
-    }
-}
-
-
 int main(int argc, char* argv[]) {
     v8::HandleScope handleScope;
     
@@ -85,15 +44,11 @@ int main(int argc, char* argv[]) {
     var arguments = Array();
     context.global()["arguments"] = arguments;
     
-    bool runShell = (argc == 1);
     for(int i = 1; i < argc; i++) {
         String arg = argv[i];
         
-        // -s --shell: force running the shell
-        if(arg == "-s" || arg == "--shell")
-            runShell = true;
         // -e --eval <code>: evaluate the code
-        else if((arg == "-e" || arg ==  "--eval") && i <= argc) {
+        if((arg == "-e" || arg ==  "--eval") && i <= argc) {
             // Run the code
             context.runScript(argv[++i], "unnamed");
             
@@ -132,8 +87,5 @@ int main(int argc, char* argv[]) {
         }
     }
     
-    // Run the shell (if no arguments or -s/--shell was given)
-    if(runShell)
-        shellLoop(context);
     return 0;
 }
