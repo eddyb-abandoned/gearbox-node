@@ -1,7 +1,10 @@
-build
-.sconsign.dblite
-contrib
-tools/*.pyc
-.kdev*
+*.kdev*
 .directory
 */.directory
+
+node
+node_g
+/out
+
+*.pyc
+/options.gypi

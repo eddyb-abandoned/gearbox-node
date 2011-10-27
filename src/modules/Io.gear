@@ -34,6 +34,7 @@ header {
 
 top {
     #include <fstream>
+    #include "Io.h"
     
     using namespace Modules;
     
@@ -68,111 +69,16 @@ top {
         file.write(contents, contents.length());
         return undefined;
     }
-    
-    #define _THIS_FSTREAM (This["fstream"].to<std::fstream*>())
-    
-    #define _FSTREAM_READ(x, i, dw) do {x i;_THIS_FSTREAM->read(reinterpret_cast<char*>(&i), sizeof(x));dw;} while(0)
-    //printf("Error while reading an %s: %s\n", #x, strerror(errno));
 }
 
 module Io {
-    class Stream {
-        var fstream = 0;
-        
-        function Stream(path) {
-            this["fstream"] = new std::fstream(path.to<String>());
+    object exports {
+        function read(filePath) {
+            return Io::read(filePath);
         }
         
-        function Stream(path, mode) {
-            std::ios_base::openmode openMode = static_cast<std::ios_base::openmode>(0);
-            if(mode.is<Object>()) {
-                if(mode["in"])
-                    openMode |= std::fstream::in;
-                if(mode["out"])
-                    openMode |= std::fstream::out;
-                if(mode["binary"])
-                    openMode |= std::fstream::binary;
-                if(mode["append"])
-                    openMode |= std::fstream::app;
-            } else {
-                String modeString = mode;
-                char *modeChar = modeString;
-                while(*modeChar) {
-                    if(*modeChar == 'r')
-                        openMode |= std::fstream::in;
-                    if(*modeChar == 'w')
-                        openMode |= std::fstream::out;
-                    if(*modeChar == 'b')
-                        openMode |= std::fstream::binary;
-                    if(*modeChar == '+')
-                        openMode |= std::fstream::app;
-                    modeChar++;
-                }
-            }
-            this["fstream"] = new std::fstream(path.to<String>(), openMode);
-            if(!_THIS_FSTREAM->good())
-                THROW_CERROR(path.to<String>() + ": ");
+        function write(filePath, contents) {
+            return Io::write(filePath, contents);
         }
-        
-        function tellg() {
-            return Integer(_THIS_FSTREAM->tellg());
-        }
-        
-        function seekg(pos) {
-            _THIS_FSTREAM->seekg(pos.to<int>());
-        }
-        
-        function seekg(off, dir) {
-            _THIS_FSTREAM->seekg(off, static_cast<std::ios_base::seekdir>(dir.to<int>()));
-        }
-        
-        function readBinary(_f) {
-            String f = _f;
-            
-            #define _HANDLE_FMT(fmt, type, retType)if(f == #fmt)_FSTREAM_READ(type, x, return retType(x))
-            #define _HANDLE_INT_FMT(n) _HANDLE_FMT(u##n, uint##n##_t, Integer);_HANDLE_FMT(i##n, int##n##_t, Integer);_HANDLE_FMT(s##n, int##n##_t, Integer)
-            
-            _HANDLE_INT_FMT(8);
-            _HANDLE_INT_FMT(16);
-            _HANDLE_INT_FMT(32);
-            _HANDLE_INT_FMT(64);
-            
-            _HANDLE_FMT(f, float, Number);
-            _HANDLE_FMT(f32, float, Number);
-            _HANDLE_FMT(d, double, Number);
-            _HANDLE_FMT(f64, double, Number);
-            _HANDLE_FMT(ld, long double, Number);
-            _HANDLE_FMT(f128, long double, Number);
-            
-            #undef _HANDLE_INT_FMT
-            #undef _HANDLE_FMT
-        }
-        
-        function tellp() {
-            return Integer(_THIS_FSTREAM->tellp());
-        }
-        
-        function seekp(pos) {
-            _THIS_FSTREAM->seekp(pos.to<int>());
-        }
-        
-        function seekp(off, dir) {
-            _THIS_FSTREAM->seekp(off, static_cast<std::ios_base::seekdir>(dir.to<int>()));
-        }
-        
-        function close() {
-            _THIS_FSTREAM->close();
-        }
-    }
-    
-    var SeekBeg = std::ios_base::beg;
-    var SeekEnd = std::ios_base::end;
-    
-    function read(filePath) {
-        return Io::read(filePath);
-    }
-    
-    function write(filePath, contents) {
-        return Io::write(filePath, contents);
     }
 }

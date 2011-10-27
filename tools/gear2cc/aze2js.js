@@ -4,7 +4,7 @@ if(arguments.length <= 2)
 var sourceFile = arguments[1], outputFile = arguments[2];
 
 var Io = require('Io');
-var source = Io.read(sourceFile), output = 'try {var codeaze = load("Codeaze.js");}catch(e){var codeaze = load("gear2cc/Codeaze.js");} /** @todo require("./Codeaze.js") */\nvar $aze = new codeaze.Codeaze();\n\n';
+var source = Io.read(sourceFile), output = 'try {var codeaze = load("Codeaze.js");}catch(e){var codeaze = load("tools/gear2cc/Codeaze.js");} /** @todo require("./Codeaze.js") */\nvar $aze = new codeaze.Codeaze();\n\n';
 
 function scanRegExp(flags) {
     var regexp = '/';
