@@ -96,7 +96,11 @@
 
         [ 'node_use_dtrace=="true"', {
           'sources': [
-            #'src/node_provider.h', # why does this get generated into src and not SHARED_INTERMEDIATE_DIR?
+            'src/node_dtrace.cc',
+            'src/node_dtrace.h',
+            # why does node_provider.h get generated into src and not
+            # SHARED_INTERMEDIATE_DIR?
+            'src/node_provider.h',
           ],
         }],
 
@@ -109,7 +113,7 @@
         [ 'OS=="win"', {
           'sources': [
             #'src/platform_win32.cc',
-            # headers to make for a more pleasant IDE experience
+            ## headers to make for a more pleasant IDE experience
             #'src/platform_win32.h',
           ],
           'defines': [
@@ -142,6 +146,12 @@
           'libraries': [
             '-lutil',
             '-lkvm',
+          ],
+        }],
+        [ 'OS=="solaris"', {
+          #'sources': [ 'src/platform_sunos.cc' ],
+          'libraries': [
+            '-lkstat',
           ],
         }],
       ],
@@ -209,4 +219,3 @@
     }, # end gears
   ] # end targets
 }
-
