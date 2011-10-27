@@ -9,24 +9,10 @@
     'node_use_openssl%': 'true',
     'node_use_system_openssl%': 'false',
     'gear_files': [
-      'src/modules/constants.gear',
-      'src/modules/events.js',
-      'src/modules/fs.gear',
-      'src/modules/path.js',
-      'src/modules/stream.js',
-      'src/modules/util.js',
-      
       #FIXME
       'src/modules/Io.gear',
     ],
     'gear_output': [
-      'src/modules/constants.cc',
-      'src/modules/events.cc',
-      'src/modules/fs.cc',
-      'src/modules/path.cc',
-      'src/modules/stream.cc',
-      'src/modules/util.cc',
-      
       #FIXME
       'src/modules/Io.cc',
     ],
@@ -160,7 +146,7 @@
           'SubSystem': 1, # /subsystem:console
         },
       },
-      'cflags_cc': [ '-std=c++0x' ],
+      'cflags_cc': [ '-std=c++0x', '-Wno-unused' ],
     },
 
     {
