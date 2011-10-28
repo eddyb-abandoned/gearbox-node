@@ -343,7 +343,6 @@ static Module _module_' + moduleName + '("'+moduleName+'", _setup_' + moduleName
     
     $aze.spaceIgnore = false;
     var io = require('Io');
-    print(JSON.stringify(arguments));
     if(arguments.length > 1) {
         for(var i = 1; i < arguments.length; i++) {
             l = 1;
