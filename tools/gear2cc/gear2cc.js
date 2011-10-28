@@ -119,7 +119,7 @@ $aze.symbols.object = new codeaze.Symbol('l/object/ +identifier /{/ objectConten
 $aze.symbols.objectContents = new codeaze.Symbol('( +|object|class|variableDef|function|getter|setter|nativeBlock)*', function($){var $$;$$=$[0].map(function(x){return x[0]}).filter(function(x){return !x.length});return $$;});
 $aze.symbols.class = new codeaze.Symbol('l/class/ +identifier( /:/ identifierList)? /{/ objectContents /}/', function($){var $$;$$=createClass($[3], $[8], $[0], $[4]&&$[4][3]);return $$;});
 $aze.symbols.variableDef = new codeaze.Symbol('l(/static/ )?/var/ +identifier /=/ nativeCodeInline /;/', function($){var $$;$$={type:$[1]?'static-var':'var', name:$[4], val:$[8]};return $$;});
-$aze.symbols.function = new codeaze.Symbol('l(/static/ )?/function/ +identifier /\\(/ identifierList /\\)/ /{/nativeCode/}/', function($){var $$;$$={type:$[1]?'static-function':'function', name:$[4], args:$[8], code:$[13], line:$[0]};return $$;});
+$aze.symbols.function = new codeaze.Symbol('l(/static/ )?(/function/ +)?identifier /\\(/ identifierList /\\)/ /{/nativeCode/}/', function($){var $$;$$={type:$[1]?'static-function':'function', name:$[3], args:$[7], code:$[12], line:$[0]};return $$;});
 $aze.symbols.getter = new codeaze.Symbol('l/get/ +identifier /\\(/ /\\)/ /{/nativeCode/}/', function($){var $$;$$={type:'getter', name:$[3], args:[], code:$[10], line:$[0]};return $$;});
 $aze.symbols.setter = new codeaze.Symbol('l/set/ +identifier /\\(/ identifier /\\)/ /{/nativeCode/}/', function($){var $$;$$={type:'setter', name:$[3], args:[$[7]], code:$[12], line:$[0]};return $$;});
 $aze.symbols.nativeBlock = new codeaze.Symbol('l,identifier /{/nativeCode/}/', function($){var $$;$$={type:'native-block', which:$[1], code:$[4], line:$[0]};return $$;});
@@ -339,7 +339,6 @@ static Module _module_' + moduleName + '("'+moduleName+'", _setup_' + moduleName
 
 $aze.spaceIgnore = false;
 var io = require('Io');
-print(JSON.stringify(arguments));
 if(arguments.length > 1) {
     for(var i = 1; i < arguments.length; i++) {
         l = 1;

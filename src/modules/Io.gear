@@ -32,7 +32,7 @@ top {
 
 module Io {
     object exports {
-        function read(filePath) {
+        read(filePath) {
             std::ifstream file(*filePath.to<String>(), std::ifstream::in | std::ifstream::binary);
             if(!file.good())
                 THROW_CERROR(filePath.to<String>() + ": ");
@@ -50,7 +50,7 @@ module Io {
             return contents;
         }
         
-        function write(filePath, contents) {
+        write(filePath, contents) {
             std::ofstream file(*filePath.to<String>());
             if(!file.good())
                 THROW_CERROR(filePath.to<String>() + ": ");

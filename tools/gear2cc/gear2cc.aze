@@ -121,7 +121,7 @@ objectContents: `( +|object|class|variableDef|function|getter|setter|nativeBlock
 
 class: `l/class/ +identifier( /:/ identifierList)? /{/ objectContents /}/` {$$=createClass($3, $8, $0, $4&&$4[3])};
 variableDef: `l(/static/ )?/var/ +identifier /=/ nativeCodeInline /;/` {$$={type:$1?'static-var':'var', name:$4, val:$8}};
-function: `l(/static/ )?/function/ +identifier /\(/ identifierList /\)/ /{/nativeCode/}/` {$$={type:$1?'static-function':'function', name:$4, args:$8, code:$13, line:$0}};
+function: `l(/static/ )?(/function/ +)?identifier /\(/ identifierList /\)/ /{/nativeCode/}/` {$$={type:$1?'static-function':'function', name:$3, args:$7, code:$12, line:$0}};
 getter: `l/get/ +identifier /\(/ /\)/ /{/nativeCode/}/` {$$={type:'getter', name:$3, args:[], code:$10, line:$0}};
 setter: `l/set/ +identifier /\(/ identifier /\)/ /{/nativeCode/}/` {$$={type:'setter', name:$3, args:[$7], code:$12, line:$0}};
 nativeBlock: `l,identifier /{/nativeCode/}/` {$$={type:'native-block', which:$1, code:$4, line:$0}};
