@@ -132,7 +132,7 @@ namespace Gearbox {
             }
             template <class... Args>
             Node operator()(Args... _args) {
-                call(*this, _args...);
+                return call(*this, _args...);
             }
             
         private:

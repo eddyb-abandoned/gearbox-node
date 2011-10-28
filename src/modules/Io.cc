@@ -27,62 +27,51 @@ using namespace Gearbox;
 
 #line 1 "src/modules/Io.gear"
 #include <fstream>
-#include "Io.h"
-
-using namespace Modules;
 
 static var CError(String prefix = "") {
     return Error(prefix + strerror(errno));
 }
 #define THROW_CERROR(...) THROW(CError(__VA_ARGS__))
 
-var Io::read(String filePath) {
-    std::ifstream file(filePath, std::ifstream::in | std::ifstream::binary);
-    if(!file.good())
-        THROW_CERROR(filePath + ": ");
-    
-    file.seekg(0, std::ios::end);
-    size_t length = file.tellg();
-    file.seekg(0, std::ios::beg);
-    
-    char *pBuffer = new char [length];
-    
-    file.read(pBuffer, length);
-    String contents(pBuffer, length);
-    
-    delete [] pBuffer;
-    return contents;
-}
-
-var Io::write(String filePath, String contents) {
-    std::ofstream file(filePath);
-    if(!file.good())
-        THROW_CERROR(filePath + ": ");
-    
-    file.write(contents, contents.length());
-    return undefined;
-}
-
 static v8::Handle<v8::Value> _Io_exports_read(const v8::Arguments &args) {
     if(args.Length() >= 1) {
-        #line 76 "src/modules/Io.gear"
+        #line 35 "src/modules/Io.gear"
         Value filePath(args[0]);
-        return Io::read(filePath);
+        std::ifstream file(*filePath.to<String>(), std::ifstream::in | std::ifstream::binary);
+        if(!file.good())
+            THROW_CERROR(filePath.to<String>() + ": ");
+        
+        file.seekg(0, std::ios::end);
+        size_t length = file.tellg();
+        file.seekg(0, std::ios::beg);
+        
+        char *pBuffer = new char [length];
+        
+        file.read(pBuffer, length);
+        String contents(pBuffer, length);
+        
+        delete [] pBuffer;
+        return contents;
     }
     THROW_ERROR("Invalid call to Io.exports.read");
 }
 
 static v8::Handle<v8::Value> _Io_exports_write(const v8::Arguments &args) {
     if(args.Length() >= 2) {
-        #line 80 "src/modules/Io.gear"
+        #line 53 "src/modules/Io.gear"
         Value filePath(args[0]), contents(args[1]);
-        return Io::write(filePath, contents);
+        std::ofstream file(*filePath.to<String>());
+        if(!file.good())
+            THROW_CERROR(filePath.to<String>() + ": ");
+        
+        file.write(*contents.to<String>(), contents.length());
+        return undefined;
     }
     THROW_ERROR("Invalid call to Io.exports.write");
 }
 
 
-#line 85 "src/modules/Io.cc"
+#line 74 "src/modules/Io.cc"
 static void _setup_Io(Value exports) {
     exports["read"] = Function(_Io_exports_read, "read");
     exports["write"] = Function(_Io_exports_write, "write");

@@ -21,64 +21,41 @@ license {
     // USE OR OTHER DEALINGS IN THE SOFTWARE.
 }
 
-header {
-    namespace Gearbox {
-        namespace Modules {
-            namespace Io {
-                var read(String filePath);
-                var write(String filePath, String contents);
-            }
-        }
-    }
-}
-
 top {
     #include <fstream>
-    #include "Io.h"
-    
-    using namespace Modules;
     
     static var CError(String prefix = "") {
         return Error(prefix + strerror(errno));
     }
     #define THROW_CERROR(...) THROW(CError(__VA_ARGS__))
-    
-    var Io::read(String filePath) {
-        std::ifstream file(filePath, std::ifstream::in | std::ifstream::binary);
-        if(!file.good())
-            THROW_CERROR(filePath + ": ");
-        
-        file.seekg(0, std::ios::end);
-        size_t length = file.tellg();
-        file.seekg(0, std::ios::beg);
-        
-        char *pBuffer = new char [length];
-        
-        file.read(pBuffer, length);
-        String contents(pBuffer, length);
-        
-        delete [] pBuffer;
-        return contents;
-    }
-    
-    var Io::write(String filePath, String contents) {
-        std::ofstream file(filePath);
-        if(!file.good())
-            THROW_CERROR(filePath + ": ");
-        
-        file.write(contents, contents.length());
-        return undefined;
-    }
 }
 
 module Io {
     object exports {
         function read(filePath) {
-            return Io::read(filePath);
+            std::ifstream file(*filePath.to<String>(), std::ifstream::in | std::ifstream::binary);
+            if(!file.good())
+                THROW_CERROR(filePath.to<String>() + ": ");
+            
+            file.seekg(0, std::ios::end);
+            size_t length = file.tellg();
+            file.seekg(0, std::ios::beg);
+            
+            char *pBuffer = new char [length];
+            
+            file.read(pBuffer, length);
+            String contents(pBuffer, length);
+            
+            delete [] pBuffer;
+            return contents;
         }
         
         function write(filePath, contents) {
-            return Io::write(filePath, contents);
+            std::ofstream file(*filePath.to<String>());
+            if(!file.good())
+                THROW_CERROR(filePath.to<String>() + ": ");
+            
+            file.write(*contents.to<String>(), contents.length());
         }
     }
 }

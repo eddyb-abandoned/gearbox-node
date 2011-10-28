@@ -22,16 +22,9 @@
 #ifndef GEARBOX_SHELL_H
 #define GEARBOX_SHELL_H
 
-#include <functional>
-
 #include <cstdio>
 #define errprintf(...) std::fprintf(stderr, __VA_ARGS__)
 #define _STR_NEWLINE "\n"
 #define _STR_SPACE " "
-
-namespace Gearbox {
-    /// Custom mainLoop handler.
-    extern std::function<void()> g_pMainLoop;
-}
 
 #endif

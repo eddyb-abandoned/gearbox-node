@@ -20,14 +20,11 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <gearbox.h>
-#include <modules/Io.h>
 
 #include <cstdlib>
 #include <iostream>
 
 namespace Gearbox {
-    using namespace Modules;
-    
     Context *Context::m_pCurrentContext = 0;
     
     static v8::Handle<v8::Value> _exit(const v8::Arguments& args) {
@@ -40,7 +37,7 @@ namespace Gearbox {
             Value file(args[0]);
             
             TryCatch tryCatch;
-            String source = Io::read(file);
+            String source = Module::require("Io")["read"](file);
             
             // Report exceptions caught while reading the file
             if(tryCatch.hasCaught())
@@ -48,11 +45,11 @@ namespace Gearbox {
             
             Context *pCurrentContext = Context::getCurrent();
             if(!pCurrentContext)
-                return Throw(Error("No Context is in use"));
+                THROW_ERROR("No Context is in use");
             
             return pCurrentContext->runScript(source, file);
         }
-        return Throw(Error("Invalid call to load"));
+        THROW_ERROR("Invalid call to load");
     }
     
     static v8::Handle<v8::Value> _print(const v8::Arguments& args) {
@@ -62,13 +59,13 @@ namespace Gearbox {
             std::cout << std::endl;
             return undefined;
         }
-        return Throw(Error("Invalid call to print"));
+        THROW_ERROR("Invalid call to print");
     }
     
     static v8::Handle<v8::Value> _require(const v8::Arguments& args) {
         if(args.Length() >= 1)
             return Module::require(Value(args[0]));
-        return Throw(Error("Invalid call to require"));
+        THROW_ERROR("Invalid call to require");
     }
     
     Context::Context() {

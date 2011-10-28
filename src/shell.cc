@@ -20,16 +20,12 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <gearbox.h>
-#include <modules/Io.h>
 
 using namespace Gearbox;
-using namespace Modules;
 
-std::function<void()> Gearbox::g_pMainLoop;
+#include <iostream>
 
-#include <cstdlib>
-
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     v8::HandleScope handleScope;
     
     // Pass the flags first to v8
@@ -47,22 +43,14 @@ int main(int argc, char* argv[]) {
     for(int i = 1; i < argc; i++) {
         String arg = argv[i];
         
-        // -e --eval <code>: evaluate the code
-        if((arg == "-e" || arg ==  "--eval") && i <= argc) {
-            // Run the code
-            context.runScript(argv[++i], "unnamed");
-            
-            // Stop if there are exceptions
-            if(tryCatch.hasCaught())
-                return 1;
-        }
         // Warn about unknown flags
-        else if(arg.compare("--", 2))
-            printf("Warning: unknown flag %s." _STR_NEWLINE "Try --help for options" _STR_NEWLINE, *arg);
+        if(arg.compare("--", 2))
+            std::cerr << "Warning: unknown flag " << *arg << "." << std::endl <<  "Try --help for options" << std::endl;
         // Treat the first argument that is not an option as a file to execute
         else {
+            
             // Read the file
-            String source = Io::read(*arg);
+            String source = Module::require("Io")["read"](arg);
             
             // Report exceptions caught while reading the file
             if(tryCatch.hasCaught())
@@ -75,17 +63,8 @@ int main(int argc, char* argv[]) {
             // Run the script
             context.runScript(source, arg);
             
-            // Specific mainLoop handlers.
-            if(g_pMainLoop)
-                g_pMainLoop();
-            
             // Stop if there are exceptions
-            if(tryCatch.hasCaught())
-                return 1;
-            else
-                break;
+            return tryCatch.hasCaught();
         }
     }
-    
-    return 0;
 }
