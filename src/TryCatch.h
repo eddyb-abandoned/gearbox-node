@@ -29,7 +29,7 @@
 namespace Gearbox {
     class TryCatch {
         public:
-            TryCatch() : m_pPreviousTryCatch(m_pCurrentTryCatch), m_bHasLocalException(false) {
+            TryCatch() : m_bHasLocalException(false), m_pPreviousTryCatch(m_pCurrentTryCatch) {
                 m_pCurrentTryCatch = this;
             }
             

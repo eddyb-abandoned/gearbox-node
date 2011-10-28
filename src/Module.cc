@@ -54,7 +54,7 @@ namespace Gearbox {
             Module::m_pModules = new std::map<String, Module*>();
         
         if(!m_pModules->count(moduleName))
-            return Throw(Error("Module isn't already loaded"));
+            return Throw(Error("Module "+moduleName+" doesn't exist"));
         
         return (*m_pModules)[moduleName]->require();
     }
