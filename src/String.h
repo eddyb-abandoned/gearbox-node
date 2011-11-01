@@ -25,6 +25,7 @@
 #include <gearbox.h>
 
 #include <cstring>
+#include <cctype>
 
 namespace Gearbox {
     class String {
@@ -35,27 +36,43 @@ namespace Gearbox {
             String(const char *pString, int iLength=-1) {
                 clone(const_cast<char*>(pString), iLength);
             }
+            String(uint8_t *pString, int iLength=-1) {
+                clone(reinterpret_cast<char*>(pString), iLength);
+            }
             String(const String &that) {
                 clone(that.m_pString, that.m_iLength);
             }
+            String(String &&that) {
+                m_pString = that.m_pString;
+                m_iLength = that.m_iLength;
+                that.clear();
+            }
             ~String() {
                 if(m_pString)
-                    delete m_pString;
+                    delete [] m_pString;
             }
             
-            String &operator =(const String &that) {
+            String &operator=(const String &that) {
                 if(m_pString)
                     delete m_pString;
                 clone(that.m_pString, that.m_iLength);
                 return *this;
             }
+            String &operator=(String &&that) {
+                if(m_pString)
+                    delete m_pString;
+                m_pString = that.m_pString;
+                m_iLength = that.m_iLength;
+                that.clear();
+                return *this;
+            }
             
             /** empty: returns true if the string is null, false otherwise */
-            bool empty() {
+            bool empty() const {
                 return !m_pString;
             }
             /** length: return 0 if the string is null, the actual length of the string otherwise */
-            int length() {
+            int length() const {
                 if(empty())
                     return 0;
                 return m_iLength;
@@ -89,12 +106,12 @@ namespace Gearbox {
             }
             
             /** Convert operators */
-            operator char*() {
+            operator char*() const {
                 if(!m_pString)
                     return const_cast<char*>("");
                 return m_pString;
             }
-            char *operator*() {
+            char *operator*() const {
                 return operator char*();
             }
             operator v8::Handle<v8::String>() {
@@ -102,6 +119,10 @@ namespace Gearbox {
             }
             operator v8::Handle<v8::Value>() {
                 return operator v8::Handle<v8::String>();
+            }
+
+            static bool is(v8::Handle<v8::Value> &handle) {
+                return handle->IsString();
             }
             
             bool compare(const String &that, int len=0) {
@@ -118,8 +139,26 @@ namespace Gearbox {
                 for(int i = 0; i < len; i++)
                     if(m_pString[i] != that.m_pString[i])
                         return false;
+                    return true;
+            }
+            
+            bool caseCompare(const String &that, int len=0) {
+                int minLen = m_iLength > that.m_iLength ? that.m_iLength : m_iLength;
+                if(len) {
+                    if(len > minLen)
+                        return false;
+                }
+                else {
+                    if(minLen != m_iLength || minLen != that.m_iLength)
+                        return false;
+                    len = minLen;
+                }
+                for(int i = 0; i < len; i++)
+                    if(std::tolower(m_pString[i]) != std::tolower(that.m_pString[i]))
+                        return false;
                 return true;
             }
+            
             static String concat(String left, String right);
         private:
             void clone(char *pString, int iLength) {
@@ -145,6 +184,10 @@ namespace Gearbox {
             char *m_pString;
             int m_iLength;
     };
+    /** Concatenate operator */
+    inline String operator+(const char *a, const String &b) {
+        return String::concat(a, b);
+    }
 }
 
 #endif
