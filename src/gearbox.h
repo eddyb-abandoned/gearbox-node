@@ -56,7 +56,7 @@ namespace Gearbox {
     class Object : public Value {
         public:
             Object() : Value(v8::Object::New()) {}
-            static bool is(Value &that) {
+            static bool is(const Value &that) {
                 return that.to<v8::Handle<v8::Value>>()->IsObject();
             }
     };
@@ -64,7 +64,7 @@ namespace Gearbox {
     class Array : public Value {
         public:
             Array(int length=0) : Value(v8::Array::New(length)) {}
-            static bool is(Value &that) {
+            static bool is(const Value &that) {
                 return that.to<v8::Handle<v8::Value>>()->IsArray();
             }
             template <typename T>
@@ -92,11 +92,6 @@ namespace Gearbox {
     _DEF_ERROR(SyntaxError)
     _DEF_ERROR(TypeError)
 #undef _DEF_ERROR
-    
-    template <class T>
-    static Value Internal(T that) {
-        return Value(that, Value::Internal);
-    }
     
     typedef Value var;
     

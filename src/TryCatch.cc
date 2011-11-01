@@ -33,7 +33,7 @@ namespace Gearbox {
             else
                 stackTrace = Value(m_TryCatch.StackTrace());
             
-            errprintf("%s" _STR_NEWLINE, *stackTrace);
+            std::cerr << *stackTrace << std::endl;
             
             m_TryCatch.Reset();
             m_bHasLocalException = false;
@@ -52,23 +52,23 @@ namespace Gearbox {
                 message = m_TryCatch.Message();
             
             if(message.IsEmpty())
-                errprintf("%s" _STR_NEWLINE, *exception);
+                std::cerr << *exception << std::endl;
             else {
                 // Print (filename):(line number): (message).
                 String filename = Value(message->GetScriptResourceName());
-                errprintf("%s:%i: %s" _STR_NEWLINE, *filename, message->GetLineNumber(), *exception);
+                std::cerr << *filename << ':' << message->GetLineNumber() << ": " << *exception << std::endl;
                 
                 // Print line of source code.
                 String sourceline = Value(message->GetSourceLine());
-                errprintf("%s" _STR_NEWLINE, *sourceline);
+                std::cerr << *sourceline << std::endl;
                 
                 // Print wavy underline
                 int start = message->GetStartColumn(), end = message->GetEndColumn();
                 for(int i = 0; i < start; i++)
-                    errprintf(_STR_SPACE);
+                    std::cerr << ' ';
                 for(int i = start; i < end; i++)
-                    errprintf("^");
-                errprintf(_STR_NEWLINE);
+                    std::cerr << '^';
+                std::cerr << std::endl;
             }
             
             m_TryCatch.Reset();

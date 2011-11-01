@@ -36,9 +36,9 @@
       ],
 
       'sources': [
+        'src/main.cc',
         'src/Context.cc',
-        'src/Module.cc',
-        'src/shell.cc',
+        'src/NativeModule.cc',
         'src/String.cc',
         'src/TryCatch.cc',
         'src/Value.cc',
@@ -48,8 +48,7 @@
         # headers to make for a more pleasant IDE experience
         'src/Context.h',
         'src/gearbox.h',
-        'src/Module.h',
-        'src/shell.h',
+        'src/NativeModule.h',
         'src/String.h',
         'src/TryCatch.h',
         'src/Value.h',

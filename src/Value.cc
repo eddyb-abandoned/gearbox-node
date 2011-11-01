@@ -23,22 +23,6 @@
 
 namespace Gearbox {
     
-    //void ValueList::push(Value that) {
-    //    push(that.to<v8::Handle<v8::Value>>());
-    //}
-    
-    Value::~Value() {
-        if(!m_hValue.IsEmpty())
-            m_hValue.MakeWeak(0, weakCallback);
-    }
-    
-    void Value::from(const Value &that) {
-        if(that.m_hValue.IsEmpty())
-            from(that.m_pValue);
-        else
-            from(that.m_hValue);
-    }
-    
     void Value::from(v8::Handle<v8::Value> that) {
         if(that.IsEmpty())
             from(undefined);
@@ -55,12 +39,21 @@ namespace Gearbox {
         m_pValue = that;
     }
     
-    String Value::to(Type<String>) {
-        v8::String::Utf8Value stringValue(m_hValue.IsEmpty() ? m_pValue.operator v8::Handle<v8::Value>() : m_hValue);
-        return String(*stringValue /*? *stringValue : "<string conversion failed>"*/);
+    String Value::to(Type<String>) const {
+        //if(m_hValue.IsEmpty())
+        //    return *v8::String::Utf8Value(m_pValue.operator v8::Handle<v8::Value>());
+        //return *v8::String::Utf8Value(m_hValue);
+        if(m_hValue.IsEmpty()) {
+            v8::String::Utf8Value v(m_pValue.operator v8::Handle<v8::Value>());
+            return String(*v);
+        }
+        v8::String::Utf8Value v(m_hValue);
+        return String(*v);
+        //v8::String::Utf8Value stringValue(m_hValue.IsEmpty() ? m_pValue.operator v8::Handle<v8::Value>() : m_hValue);
+        //return String(*stringValue /*? *stringValue : "<string conversion failed>"*/);
     }
     
-    int64_t Value::to(Type<int64_t>) {
+    int64_t Value::to(Type<int64_t>) const {
         if(m_hValue.IsEmpty()) {
             if(m_pValue.m_Kind == Primitive::Number)return m_pValue.m_dValue;
             else if(m_pValue.m_Kind == Primitive::True)return 1;
@@ -70,7 +63,7 @@ namespace Gearbox {
         return m_hValue->IntegerValue();
     }
     
-    double Value::to(Type<double>) {
+    double Value::to(Type<double>) const {
         if(m_hValue.IsEmpty()) {
             if(m_pValue.m_Kind == Primitive::Number)return m_pValue.m_dValue;
             else if(m_pValue.m_Kind == Primitive::True)return 1;
@@ -80,7 +73,7 @@ namespace Gearbox {
         return m_hValue->NumberValue();
     }
     
-    bool Value::to(Type<bool>) {
+    bool Value::to(Type<bool>) const {
         if(m_hValue.IsEmpty()) {
             if(m_pValue.m_Kind == Primitive::Number)return m_pValue.m_dValue;
             else if(m_pValue.m_Kind == Primitive::True)return true;
@@ -90,14 +83,14 @@ namespace Gearbox {
         return m_hValue->BooleanValue();
     }
     
-    v8::Handle<v8::Value> Value::to(Type<v8::Handle<v8::Value>>){
+    v8::Handle<v8::Value> Value::to(Type<v8::Handle<v8::Value>>) const {
         if(m_hValue.IsEmpty())
             return m_pValue;
         else
             return m_hValue;
     }
     
-    int Value::length() {
+    int Value::length() const {
         if(m_hValue.IsEmpty())
             return 0;
         if(m_hValue->IsArray())

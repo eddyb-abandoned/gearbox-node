@@ -24,6 +24,8 @@
 
 #include <gearbox.h>
 
+#include <iostream>
+
 namespace Gearbox {
     
     class Primitive {
@@ -49,7 +51,7 @@ namespace Gearbox {
                     m_dValue = dValue;
             }
             
-            operator v8::Handle<v8::Value>() {
+            operator v8::Handle<v8::Value>() const {
                 if(m_Kind == Undefined)
                     return v8::Undefined();
                 else if(m_Kind == Null)
@@ -90,13 +92,13 @@ namespace Gearbox {
                     m_Kind = Undefined;
             }
             
-            bool operator ==(Primitive that) {
+            bool operator==(Primitive that) {
                 if(m_Kind <= Null)
                     return m_Kind == that.m_Kind;
                 return operator v8::Handle<v8::Value>()->Equals(that);
             }
             
-            bool operator !=(Primitive that) {
+            bool operator!=(Primitive that) {
                 return !operator==(that);
             }
             
@@ -115,24 +117,34 @@ namespace Gearbox {
     template <class Node, class Index>
     class Assignable : public Node {
         public:
-            Assignable(Node parent, Index index)/* : m_Parent(parent), m_Index(index)*/ {
+            Assignable(const Node &parent, const Index &index)/* : m_Parent(parent), m_Index(index)*/ {
                 m_Parent = parent;
                 m_Index = index;
                 from(m_Parent.get(m_Index));
             }
             template <class T>
-            Node &operator=(T _that) {
+            Node &operator=(const T &_that) {
                 Node that(_that);
-                m_Parent.set(m_Index, that, that.m_Flags);
+                m_Parent.set(m_Index, that);
                 return *this;
             }
-            Node &operator=(Node that) {
-                m_Parent.set(m_Index, that, that.m_Flags);
+            template <class T>
+            Node &operator=(const T &&_that) {
+                Node that(_that);
+                m_Parent.set(m_Index, that);
+                return *this;
+            }
+            Node &operator=(const Node &that) {
+                m_Parent.set(m_Index, that);
+                return *this;
+            }
+            Node &operator=(const Node &&that) {
+                m_Parent.set(m_Index, that);
                 return *this;
             }
             template <class... Args>
             Node operator()(Args... _args) {
-                return call(*this, _args...);
+                return call(m_Parent, _args...);
             }
             
         private:
@@ -143,21 +155,18 @@ namespace Gearbox {
     /** A class for every kind of JavaScript value (Objects, Arrays, Functions, Numbers, Strings) */
     class Value {
         public:
-            /** Various control flags */
-            enum Flags {
-                Default = 0,
-                Internal  = 1
-            };
-            
             /** Default constructor */
-            Value() : m_Flags(Default) {}
+            Value() {}
             /** Constructors */
             template <class T>
-            Value(T that, uint8_t flags=Default) : m_Flags(flags) {
+            Value(T that) {
                 from(that);
             }
             /** Default destructor */
-            virtual ~Value();
+            virtual ~Value() {
+                if(!m_hValue.IsEmpty())
+                    m_hValue.MakeWeak(0, weakCallback);
+            }
             
             /** Copy operators */
             template <class T>
@@ -171,7 +180,12 @@ namespace Gearbox {
             }
             
             /** Instantiation tools */
-            void from(const Value&);
+            void from(const Value &that) {
+                if(that.m_hValue.IsEmpty())
+                    from(that.m_pValue);
+                else
+                    from(that.m_hValue);
+            }
             void from(v8::Handle<v8::Value>);
             template <class T>
             void from(v8::Handle<T> that) {
@@ -215,78 +229,77 @@ namespace Gearbox {
             }
             void from(void *that) {
                 from(v8::External::New(that));
-                // Avoid exposing an External to JavaScript
-                m_Flags |= Internal;
             }
             
             /** Conversion tools, used to get primitive values */
             template <class T>
-            T to() {
+            T to() const {
                 return to(Type<T>());
             }
             
-            v8::Handle<v8::Value> to(Type<v8::Handle<v8::Value>>);
-            v8::Handle<v8::Data> to(Type<v8::Handle<v8::Data>>) {
+            v8::Handle<v8::Value> to(Type<v8::Handle<v8::Value>>) const;
+            v8::Handle<v8::Data> to(Type<v8::Handle<v8::Data>>) const {
                 return to<v8::Handle<v8::Value>>();
             }
             template <class T>
-            v8::Handle<T> to(Type<v8::Handle<T>>) {
+            v8::Handle<T> to(Type<v8::Handle<T>>) const {
                 return v8::Handle<T>::Cast(to<v8::Handle<v8::Value>>());
             }
-            Primitive to(Type<Primitive>) {
+            Primitive to(Type<Primitive>) const {
                 if(m_hValue.IsEmpty())
                     return m_pValue;
                 Primitive value;
                 value.from(m_hValue);
                 return value;
             }
-            String to(Type<String>);
-            int64_t to(Type<int64_t>);
+            String to(Type<String>) const;
+            int64_t to(Type<int64_t>) const;
 #ifdef __LP64__
-            int64_t to(Type<long long int>) {
+            int64_t to(Type<long long int>) const {
                 return to<int64_t>();
             }
-            uint64_t to(Type<unsigned long long int>) {
+            uint64_t to(Type<unsigned long long int>) const {
                 return to<int64_t>();
             }
 #endif
-            uint64_t to(Type<uint64_t>) {
+            uint64_t to(Type<uint64_t>) const {
                 return to<int64_t>();
             }
-            uint32_t to(Type<uint32_t>) {
+            uint32_t to(Type<uint32_t>) const {
                 return to<int64_t>();
             }
-            uint16_t to(Type<uint16_t>) {
+            uint16_t to(Type<uint16_t>) const {
                 return to<int64_t>();
             }
-            int16_t to(Type<int16_t>) {
+            int16_t to(Type<int16_t>) const {
                 return to<int64_t>();
             }
-            char to(Type<char>) {
+            char to(Type<char>) const {
                 return to<int64_t>();
             }
-            uint8_t to(Type<uint8_t>) {
+            uint8_t to(Type<uint8_t>) const {
                 return to<int64_t>();
             }
-            int8_t to(Type<int8_t>) {
+            int8_t to(Type<int8_t>) const {
                 return to<int64_t>();
             }
-            int to(Type<int>) {
+            int to(Type<int>) const {
                 return to<int64_t>();
             }
-            double to(Type<double>);
-            float to(Type<float>) {
+            double to(Type<double>) const;
+            float to(Type<float>) const {
                 return to<double>();
             }
-            long double to(Type<long double>) {
+            long double to(Type<long double>) const {
                 return to<double>();
             }
-            bool to(Type<bool>);
+            bool to(Type<bool>) const;
             
             template <class T>
-            T *to(Type<T*>) {
+            T *to(Type<T*>) const {
+                std::cerr << "Value::to<T*> is deprecated!" << std::endl;
                 if(m_hValue.IsEmpty() || !m_hValue->IsExternal() || !v8::External::Unwrap(m_hValue)) {
-                    errprintf("WARNING: empty/NULL External!" _STR_NEWLINE);
+                    std::cerr << "Empty/NULL External!" << std::endl;
                     return 0;
                 }
                 return reinterpret_cast<T*>(v8::External::Unwrap(m_hValue));
@@ -318,64 +331,72 @@ bool operator OP(Primitive that) { \
 #undef DECLARE_OP
             
             /** Length, for Arrays and Strings */
-            int length();
+            int length() const;
             
             /** Access to Object or Array elements */
-            Assignable<Value, uint32_t> operator[](uint32_t idx) {
-                //INSIDE(Value::operator[](uint32_t idx));
+            Assignable<Value, uint32_t> operator[](uint32_t idx) const {
                 return Assignable<Value, uint32_t>(*this, idx);
             }
-            Assignable<Value, uint32_t> operator[](int32_t idx) {
-                //INSIDE(Value::operator[](int32_t idx));
+            Assignable<Value, uint32_t> operator[](int32_t idx) const {
                 return Assignable<Value, uint32_t>(*this, idx);
             }
-            Assignable<Value, String> operator[](String idx) {
+            Assignable<Value, v8::Handle<v8::String>> operator[](const char *idx) const {
+                return Assignable<Value, v8::Handle<v8::String>>(*this, v8::String::NewSymbol(idx));
+            }
+            /*Assignable<Value, String> operator[](const String &idx) const {
                 return Assignable<Value, String>(*this, idx);
-            }
-            Value get(uint32_t idx) {
-                if(m_hValue.IsEmpty() || !(m_hValue->IsObject()))
+            }*/
+            Value get(uint32_t idx) const {
+                if(m_hValue.IsEmpty() || !m_hValue->IsObject())
                     return undefined;
-                return v8::Handle<v8::Object>::Cast(m_hValue)->Get(idx);
+                return m_hValue->ToObject()->Get(idx);
             }
-            Value get(String idx) {
-                if(m_hValue.IsEmpty() || !(m_hValue->IsObject()))
+            Value get(String idx) const {
+                if(m_hValue.IsEmpty() || !m_hValue->IsObject())
                     return undefined;
-                return v8::Handle<v8::Object>::Cast(m_hValue)->Get(idx.operator v8::Handle<v8::Value>());
+                return m_hValue->ToObject()->Get(idx.operator v8::Handle<v8::Value>());
             }
-            void set(uint32_t idx, Value val, uint8_t flags) {
-                if(m_hValue.IsEmpty() || !(m_hValue->IsObject()))
-                    return;
-                v8::Handle<v8::Object>::Cast(m_hValue)->Set(idx, val);
+            Value get(v8::Handle<v8::String> idx) const {
+                if(m_hValue.IsEmpty() || !m_hValue->IsObject())
+                    return undefined;
+                return m_hValue->ToObject()->Get(idx);
             }
-            void set(String idx, Value &val, uint8_t flags) {
-                if(m_hValue.IsEmpty() || !(m_hValue->IsObject()))
+            void set(uint32_t idx, const Value &val) {
+                if(m_hValue.IsEmpty() || !m_hValue->IsObject())
                     return;
-                if(flags & Internal)
-                    v8::Handle<v8::Object>::Cast(m_hValue)->Set(idx.operator v8::Handle<v8::Value>(), val, v8PropertyInternal);
-                else
-                    v8::Handle<v8::Object>::Cast(m_hValue)->Set(idx.operator v8::Handle<v8::Value>(), val);
+                m_hValue->ToObject()->Set(idx, val);
+            }
+            void set(String idx, const Value &val) {
+                if(m_hValue.IsEmpty() || !m_hValue->IsObject())
+                    return;
+                m_hValue->ToObject()->Set(idx.operator v8::Handle<v8::Value>(), val);
+            }
+            void set(v8::Handle<v8::String> idx, const Value &val) {
+                if(m_hValue.IsEmpty() || !m_hValue->IsObject())
+                    return;
+                m_hValue->ToObject()->Set(idx, val);
             }
             
             /** Returns true if this Value is an instance of class T */
             template <class T>
-            bool is() {
+            bool is() const {
                 return T::is(*this);
             }
             
             /** Convert operator */
             template <class T>
-            operator T() {
+            operator T() const {
                 return to<T>();
             }
             
             /** Call operator for Functions */
             template <class... Args>
-            Value operator()(Args... _args) {
+            Value operator()(Args... _args) const {
                 return call(v8::Context::GetCurrent()->Global(), _args...);
             }
             
             template <class... Args>
-            Value call(Value _this, Args... _args) {
+            Value call(Value _this, Args... _args) const {
                 if(m_hValue.IsEmpty() || !m_hValue->IsFunction())
                     return undefined;
                 
@@ -387,7 +408,7 @@ bool operator OP(Primitive that) { \
             
             /** New Instance for Functions */
             template <class... Args>
-            Value newInstance(Args... _args) {
+            Value newInstance(Args... _args) const {
                 if(m_hValue.IsEmpty() || !m_hValue->IsFunction())
                     return undefined;
                 
@@ -439,9 +460,7 @@ bool operator OP(Primitive that) { \
             };
             
             static void weakCallback(v8::Persistent<v8::Value>, void*);
-            static const v8::PropertyAttribute v8PropertyInternal = static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontEnum | v8::DontDelete);
             
-            uint8_t m_Flags;
             Primitive m_pValue;
             v8::Persistent<v8::Value> m_hValue;
             
