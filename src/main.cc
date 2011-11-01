@@ -23,8 +23,6 @@
 
 using namespace Gearbox;
 
-#include <iostream>
-
 int main(int argc, char *argv[]) {
     v8::HandleScope handleScope;
     
@@ -43,14 +41,11 @@ int main(int argc, char *argv[]) {
     for(int i = 1; i < argc; i++) {
         String arg = argv[i];
         
-        // Warn about unknown flags
-        if(arg.compare("--", 2))
-            std::cerr << "Warning: unknown flag " << *arg << "." << std::endl <<  "Try --help for options" << std::endl;
-        // Treat the first argument that is not an option as a file to execute
-        else {
+        // Ignore unknown flags
+        if(!arg.compare("-", 2)) {
             
             // Read the file
-            String source = NativeModule::require("Io")["read"](arg);
+            String source = NativeModule::require("fs")["readFileSync"](arg);
             
             // Report exceptions caught while reading the file
             if(tryCatch.hasCaught())

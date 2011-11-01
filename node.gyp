@@ -22,9 +22,6 @@
       'src/modules/sys.js',
       'src/modules/url.js',
       'src/modules/util.js',
-      
-      #FIXME
-      'src/modules/Io.gear',
     ],
     'gear_output': [
       'src/modules/assert.cc',
@@ -40,9 +37,6 @@
       'src/modules/sys.cc',
       'src/modules/url.cc',
       'src/modules/util.cc',
-      
-      #FIXME
-      'src/modules/Io.cc',
     ],
   },
 

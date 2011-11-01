@@ -28,26 +28,31 @@ using namespace Gearbox;
 
 #line 1 "src/modules/fs.gear"
 #include <uv.h>
+#include <errno.h>
 
 #include "buffer.h"
 
 // hack alert! copy of ErrnoException in node.cc, tuned for uv errors
-Value ThrowFsError(int errorNo, const char *syscall=0, const char *msg=0, const char *path=0) {
-    if(!msg || !msg[0])
-        msg = /*errno_message(errorNo)*/"";
+Value FsError(int errorNo, String syscall, String msg, String path) {
+    uv_err_t uvErr;
+    memset(&uvErr, 0, sizeof(uv_err_t));
+    uvErr.code = uv_err_code(errorNo);
+    
+    if(!msg.length())
+        msg = uv_err_name(uvErr);
 
-    String errCode = /*errno_string(errorNo)*/"", errString = errCode + ", " + msg;
+    String errCode = uv_strerror(uvErr), errString = errCode + ", " + msg;
 
     var err = Error(path ? errString + " '" + path + "'" : errString);
 
     // TODO errno should probably go
     err["errno"] = errorNo;
     err["code"] = errCode;
-    if(path)
+    if(path.length())
         err["path"] = path;
-    if(syscall)
+    if(syscall.length())
         err["syscall"] = syscall;
-    return Throw(err);
+    return err;
 }
 
 #define FS_CALL(func, cb, path, ...)                                        \
@@ -57,23 +62,23 @@ uv_fs_t req;                                                            \
 int result = uv_fs_##func(uv_default_loop(), &req, __VA_ARGS__, NULL);  \
 if(result < 0) {                                                        \
     int code = uv_last_error(uv_default_loop()).code;                   \
-    return ThrowFsError(code, #func, "", path);                         \
+    return Throw(FsError(code, #func, "", path));                         \
 }
 
 #define GET_OFFSET(a) ((a)->IsNumber() ? (a)->IntegerValue() : -1) //FIXME optArgs
 
 static v8::Handle<v8::Value> _fs_binding_Stats_Stats(const v8::Arguments &args) {
     Value This(args.This());
-    #line 66 "src/modules/fs.gear"
+    #line 71 "src/modules/fs.gear"
     
     return undefined;
 }
 
 static v8::Handle<v8::Value> _fs_binding_close(const v8::Arguments &args) {
     if(args.Length() >= 1) {
-        #line 67 "src/modules/fs.gear"
+        #line 72 "src/modules/fs.gear"
         Value fd(args[0]);
-        FS_CALL(close, 0, 0, fd);
+        FS_CALL(close, 0, "", fd);
         return undefined;
     }
     THROW_ERROR("Invalid call to fs.binding.close");
@@ -81,7 +86,7 @@ static v8::Handle<v8::Value> _fs_binding_close(const v8::Arguments &args) {
 
 static v8::Handle<v8::Value> _fs_binding_open(const v8::Arguments &args) {
     if(args.Length() >= 3) {
-        #line 71 "src/modules/fs.gear"
+        #line 76 "src/modules/fs.gear"
         Value path(args[0]), flags(args[1]), mode(args[2]);
         FS_CALL(open, 3, path, path.to<String>(), flags, mode);
         return Integer(result);
@@ -91,7 +96,7 @@ static v8::Handle<v8::Value> _fs_binding_open(const v8::Arguments &args) {
 
 static v8::Handle<v8::Value> _fs_binding_read(const v8::Arguments &args) {
     if(args.Length() >= 4) {
-        #line 76 "src/modules/fs.gear"
+        #line 81 "src/modules/fs.gear"
         Value fd(args[0]), buffer(args[1]), _offset(args[2]), _length(args[3]);
         if(!buffer.is<Buffer>())
             THROW_TYPE_ERROR("Second argument needs to be a buffer");
@@ -105,7 +110,7 @@ static v8::Handle<v8::Value> _fs_binding_read(const v8::Arguments &args) {
             THROW_ERROR("Length extends beyond buffer");
         
         off_t position = GET_OFFSET(args[4]);
-        FS_CALL(read, 5, 0, fd, Buffer::data(buffer) + offset, length, position);
+        FS_CALL(read, 5, "", fd, Buffer::data(buffer) + offset, length, position);
         return Integer(result);
     }
     THROW_ERROR("Invalid call to fs.binding.read");
@@ -113,7 +118,7 @@ static v8::Handle<v8::Value> _fs_binding_read(const v8::Arguments &args) {
 
 static v8::Handle<v8::Value> _fs_binding_write(const v8::Arguments &args) {
     if(args.Length() >= 4) {
-        #line 93 "src/modules/fs.gear"
+        #line 98 "src/modules/fs.gear"
         Value fd(args[0]), buffer(args[1]), _offset(args[2]), _length(args[3]);
         if(!buffer.is<Buffer>())
             THROW_TYPE_ERROR("Second argument needs to be a buffer");
@@ -127,14 +132,14 @@ static v8::Handle<v8::Value> _fs_binding_write(const v8::Arguments &args) {
             THROW_ERROR("Length extends beyond buffer");
         
         off_t position = GET_OFFSET(args[4]);
-        FS_CALL(write, 5, 0, fd, Buffer::data(buffer) + offset, length, position);
+        FS_CALL(write, 5, "", fd, Buffer::data(buffer) + offset, length, position);
         return Integer(result);
     }
     THROW_ERROR("Invalid call to fs.binding.write");
 }
 
 
-#line 137 "src/modules/fs.cc"
+#line 142 "src/modules/fs.cc"
 static void _setup_fs(Value exports, Value require, Value module) {
     var binding = Object();
     v8::Handle<v8::FunctionTemplate> _fs_binding_Stats = v8::FunctionTemplate::New(_fs_binding_Stats_Stats);

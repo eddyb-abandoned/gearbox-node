@@ -1,4 +1,4 @@
-try {var codeaze = load("Codeaze.js");}catch(e){var codeaze = load("tools/gear2cc/Codeaze.js");} /** @todo require("./Codeaze.js") */
+var codeaze = eval(require("fs").readFileSync("tools/gear2cc/Codeaze.js", "utf8")); /** @todo require("./Codeaze.js") */
 var $aze = new codeaze.Codeaze();
 
 
@@ -293,8 +293,8 @@ function generateModuleCode(object, name, parentPrefix, parentPath, code) {
     for(objectName in object.objects)
         generateObjectCode(object.objects[objectName], objectName, prefix, path, code);
     
-    if(object.postSetup)
-        code.init += object.postSetup;
+    if(object.nativeBlocks.postSetup)
+        code.init += object.nativeBlocks.postSetup;
 }
 
 function generateCode(gear, global) {
@@ -323,7 +323,7 @@ function generateCode(gear, global) {
             this.init += '\t' + parentObjName + '->InstanceTemplate()->SetInternalFieldCount(' + value + ');\n';
         },
         addJS: function(name, js, args) {
-        args = args.join(', ');
+            args = args.join(', ');
             js = '(function('+args+'){'+js+'})'; // TODO minify
             this.init += '\tContext::getCurrent()->runScript(' + JSON.stringify(js) + ', "' + name + '")('+args+');\n';
         },
@@ -364,25 +364,27 @@ static void _setup_' + moduleName + '(Value exports, Value require, Value module
 static NativeModule _module_' + moduleName + '("'+moduleName+'", _setup_' + moduleName + ');';
     }
     ccCode = ccCode.replace(/\t/g, '    ');
-    io.write(gear.cc, ccCode);
+    fs.writeFileSync(gear.cc, ccCode);
     
     if(global.nativeBlocks.header) {
         var hCode = license+'\
 #ifndef GEARBOX_MODULES_'+baseName.replace(/^([^/]*\/)+/,'').toUpperCase()+'_H\n\
 #define GEARBOX_MODULES_'+baseName.replace(/^([^/]*\/)+/,'').toUpperCase()+'_H\n\n\
 #include <gearbox.h>\n\n'+header+'#endif\n';
-        io.write(gear.h, hCode);
+        fs.writeFileSync(gear.h, hCode);
     }
 }
 
 $aze.spaceIgnore = false;
-var io = require('Io');
+var fs = require('fs');
+if(!global.arguments)
+    arguments = process.argv.slice(1);
 if(arguments.length > 1) {
     for(var i = 1; i < arguments.length; i++) {
         l = 1;
         var lastDot = arguments[i].lastIndexOf('.'), lastSlash = arguments[i].lastIndexOf('/')+1, baseName = arguments[i].substr(0, lastDot), ext = arguments[i].substr(lastDot+1);
         var gear = {src:arguments[i], baseName:baseName, cc:baseName+'.cc', h:baseName+'.h'};
-        var src = io.read(arguments[i]);
+        var src = fs.readFileSync(arguments[i], 'utf8');
         if(ext == 'gear')
             generateCode(gear, createObject('', $aze.parse(src), 1));
         else if(ext == 'js') {
@@ -399,4 +401,4 @@ if(arguments.length > 1) {
     }
 } else
     print('Usage: ' + arguments[0] + ' <files>');
-exit(); // Just in case gearbox-node is a (bit) broken
+(global.exit || process.exit)(); // Just in case gearbox-node is a (bit) broken

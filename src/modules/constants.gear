@@ -22,6 +22,11 @@ license {
     // USE OR OTHER DEALINGS IN THE SOFTWARE.
 }
 
+top {
+    #include <fcntl.h>
+    #include <signal.h>
+}
+
 module constants {
     postSetup {
     #define NODE_DEFINE_CONSTANT(target, constant) exports[#constant] = constant;

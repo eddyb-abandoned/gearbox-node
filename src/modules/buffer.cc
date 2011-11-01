@@ -77,44 +77,6 @@ Value encodeString(const void *buffer, size_t length, enum encoding encoding) {
     return String(static_cast<const char*>(buffer), length);
 }
 
-/*struct SlowBuffer {
-        typedef void (*freeCallback)(uint8_t *data, void *hint);
-        
-        //SlowBuffer();
-        
-        static void replace(Value &_this, uint8_t *data, size_t length, freeCallback callback, void *hint) {
-            BUFFER(_this);
-            if(buffer->m_pCallback)
-                buffer->m_pCallback(buffer->m_pData, buffer->m_pCallbackHint);
-            else if(buffer->m_nLength) {
-                delete [] buffer->m_pData;
-                v8::V8::AdjustAmountOfExternalAllocatedMemory(-(sizeof(SlowBuffer) + buffer->m_nLength));
-            }
-            
-            buffer->m_nLength = length;
-            buffer->m_pCallback = callback;
-            buffer->m_pCallbackHint = hint;
-            
-            if(buffer->m_pCallback) // If it's got a callback, use provided data.
-                buffer->m_pData = data;
-            else if(length) {
-                buffer->m_pData = new uint8_t [buffer->m_nLength];
-                if(data)
-                    memcpy(buffer->m_pData, data, buffer->m_nLength);
-                v8::V8::AdjustAmountOfExternalAllocatedMemory(sizeof(SlowBuffer) + buffer->m_nLength);
-            } else
-                buffer->m_pData = 0;
-            
-            _this.to<v8::Handle<v8::Object>>()->SetIndexedPropertiesToExternalArrayData(buffer->m_pData, v8::kExternalUnsignedByteArray, buffer->m_nLength);
-            _this["length"] = buffer->m_nLength;
-        }
-
-        size_t m_nLength;
-        uint8_t *m_pData;
-        freeCallback m_pCallback;
-        void *m_pCallbackHint;
-};*/
-
 // Returns number of bytes written.
 ssize_t decodeWrite(uint8_t *_buffer, size_t length, Value val, enum encoding encoding) {
     // XXX
@@ -245,7 +207,7 @@ struct _buffer_binding_SlowBuffer_wrap /*: public Value::DtorWrap*/ {
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_SlowBuffer(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This(), new _buffer_binding_SlowBuffer_wrap);
     if(args.Length() >= 1) {
-        #line 255 "src/modules/buffer.gear"
+        #line 217 "src/modules/buffer.gear"
         Value length(args[0]);
         This.nLength = length;
         if(This.nLength) {
@@ -264,7 +226,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_SlowBuffer(const v8::Arg
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_binarySlice(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 267 "src/modules/buffer.gear"
+        #line 229 "src/modules/buffer.gear"
         Value _start(args[0]), _end(args[1]);
         SLICE_ARGS
         return encodeString(This.pData + start, end - start, BINARY);
@@ -275,7 +237,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_binarySlice(const v8::Ar
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_asciiSlice(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 270 "src/modules/buffer.gear"
+        #line 232 "src/modules/buffer.gear"
         Value _start(args[0]), _end(args[1]);
         SLICE_ARGS
         return String(This.pData + start, end - start);
@@ -286,7 +248,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_asciiSlice(const v8::Arg
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_utf8Slice(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 273 "src/modules/buffer.gear"
+        #line 235 "src/modules/buffer.gear"
         Value _start(args[0]), _end(args[1]);
         SLICE_ARGS
         return String(This.pData + start, end - start);
@@ -297,7 +259,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_utf8Slice(const v8::Argu
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_ucs2Slice(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 276 "src/modules/buffer.gear"
+        #line 238 "src/modules/buffer.gear"
         Value _start(args[0]), _end(args[1]);
         SLICE_ARGS
         return v8::String::New(reinterpret_cast<uint16_t*>(This.pData + start), (end - start) / 2);
@@ -308,7 +270,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_ucs2Slice(const v8::Argu
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_base64Slice(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 279 "src/modules/buffer.gear"
+        #line 241 "src/modules/buffer.gear"
         Value _start(args[0]), _end(args[1]);
         SLICE_ARGS
         int n = end - start;
@@ -381,7 +343,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_base64Slice(const v8::Ar
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_fill(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 3) {
-        #line 345 "src/modules/buffer.gear"
+        #line 307 "src/modules/buffer.gear"
         Value value(args[0]), _start(args[1]), _end(args[2]);
         SLICE_ARGS
         memset(This.pData + start, value.to<uint8_t>(), end - start);
@@ -393,7 +355,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_fill(const v8::Arguments
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_copy(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 3) {
-        #line 349 "src/modules/buffer.gear"
+        #line 311 "src/modules/buffer.gear"
         Value target(args[0]), _targetStart(args[1]), _sourceStart(args[2]);
         if(!target.is<Buffer>())
             THROW_TYPE_ERROR("Target should be a Buffer");
@@ -433,7 +395,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_copy(const v8::Arguments
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_binaryWrite(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 383 "src/modules/buffer.gear"
+        #line 345 "src/modules/buffer.gear"
         Value string(args[0]), _offset(args[1]);
         size_t length = string.length(), offset = _offset;
         
@@ -450,7 +412,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_binaryWrite(const v8::Ar
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_asciiWrite(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 393 "src/modules/buffer.gear"
+        #line 355 "src/modules/buffer.gear"
         Value string(args[0]), _offset(args[1]);
         v8::Handle<v8::String> s = string;
         size_t length = string.length(), offset = _offset;
@@ -469,7 +431,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_asciiWrite(const v8::Arg
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_utf8Write(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 405 "src/modules/buffer.gear"
+        #line 367 "src/modules/buffer.gear"
         Value string(args[0]), _offset(args[1]);
         v8::Handle<v8::String> s = string;
         
@@ -493,7 +455,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_utf8Write(const v8::Argu
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_ucs2Write(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 422 "src/modules/buffer.gear"
+        #line 384 "src/modules/buffer.gear"
         Value string(args[0]), _offset(args[1]);
         v8::Handle<v8::String> s = string;
         size_t length = string.length(), offset = _offset;
@@ -516,7 +478,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_ucs2Write(const v8::Argu
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_base64Write(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 438 "src/modules/buffer.gear"
+        #line 400 "src/modules/buffer.gear"
         Value _string(args[0]), _offset(args[1]);
         assert(unbase64('/') == 63);
         assert(unbase64('+') == 62);
@@ -585,7 +547,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_base64Write(const v8::Ar
 
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_byteLength(const v8::Arguments &args) {
     if(args.Length() >= 2) {
-        #line 502 "src/modules/buffer.gear"
+        #line 464 "src/modules/buffer.gear"
         Value string(args[0]), _enc(args[1]);
         enum encoding enc = parseEncoding(_enc, UTF8);
         
@@ -604,7 +566,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_byteLength(const v8::Arg
 
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_makeFastBuffer(const v8::Arguments &args) {
     if(args.Length() >= 4) {
-        #line 516 "src/modules/buffer.gear"
+        #line 478 "src/modules/buffer.gear"
         Value _buffer(args[0]), fastBuffer(args[1]), offset(args[2]), length(args[3]);
         if(!_buffer.is<Buffer>())
             THROW_TYPE_ERROR("First argument must be a Buffer");
@@ -619,7 +581,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_makeFastBuffer(const v8:
 }
 
 
-#line 622 "src/modules/buffer.cc"
+#line 584 "src/modules/buffer.cc"
 static void _setup_buffer(Value exports, Value require, Value module) {
     var binding = Object();
     v8::Handle<v8::FunctionTemplate> _buffer_binding_SlowBuffer = v8::FunctionTemplate::New(_buffer_binding_SlowBuffer_SlowBuffer);

@@ -22,7 +22,6 @@
 #include <gearbox.h>
 
 #include <cstdlib>
-#include <iostream>
 
 namespace Gearbox {
     Context *Context::m_pCurrentContext = 0;
@@ -30,26 +29,6 @@ namespace Gearbox {
     static v8::Handle<v8::Value> _exit(const v8::Arguments& args) {
         std::_Exit(Value(args[0]));
         return undefined;
-    }
-    
-    static v8::Handle<v8::Value> _load(const v8::Arguments& args) {
-        if(args.Length() >= 1) {
-            Value file(args[0]);
-            
-            TryCatch tryCatch;
-            String source = NativeModule::require("Io")["read"](file);
-            
-            // Report exceptions caught while reading the file
-            if(tryCatch.hasCaught())
-                return undefined;
-            
-            Context *pCurrentContext = Context::getCurrent();
-            if(!pCurrentContext)
-                THROW_ERROR("No Context is in use");
-            
-            return pCurrentContext->runScript(source, file);
-        }
-        THROW_ERROR("Invalid call to load");
     }
     
     static v8::Handle<v8::Value> _print(const v8::Arguments& args) {
@@ -118,7 +97,6 @@ namespace Gearbox {
         var _global = global();
         
         _global["exit"] = Function(_exit, "exit");
-        _global["load"] = Function(_load, "load");
         _global["print"] = Function(_print, "print");
         _global["require"] = NativeModule::getRequireFunc();
         

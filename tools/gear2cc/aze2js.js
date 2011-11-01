@@ -1,10 +1,13 @@
+if(!global.arguments)
+    arguments = process.argv.slice(1);
+
 if(arguments.length <= 2)
     exit(print('Usage: '+arguments[0]+' <Codeaze source file> <JavaScript output file>'));
 
 var sourceFile = arguments[1], outputFile = arguments[2];
 
-var Io = require('Io');
-var source = Io.read(sourceFile), output = 'try {var codeaze = load("Codeaze.js");}catch(e){var codeaze = load("tools/gear2cc/Codeaze.js");} /** @todo require("./Codeaze.js") */\nvar $aze = new codeaze.Codeaze();\n\n';
+var fs = require('fs');
+var source = fs.readFileSync(sourceFile, 'utf8'), output = 'var codeaze = eval(require("fs").readFileSync("'+sourceFile.replace(/[^/]*$/,'')+'Codeaze.js", "utf8")); /** @todo require("./Codeaze.js") */\nvar $aze = new codeaze.Codeaze();\n\n';
 
 function scanRegExp(flags) {
     var regexp = '/';
@@ -160,5 +163,4 @@ for(var i = 0; i < source.length; i++) {
     }*/
     throw new Error('Unrecognized token \'' + c + '\' in "' + source + '"');
 }
-
-Io.write(outputFile, output);
+fs.writeFileSync(outputFile, output);

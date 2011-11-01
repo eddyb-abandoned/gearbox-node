@@ -94,44 +94,6 @@ top {
         // utf-8 or ascii encoding
         return String(static_cast<const char*>(buffer), length);
     }
-
-    /*struct SlowBuffer {
-            typedef void (*freeCallback)(uint8_t *data, void *hint);
-            
-            //SlowBuffer();
-            
-            static void replace(Value &_this, uint8_t *data, size_t length, freeCallback callback, void *hint) {
-                BUFFER(_this);
-                if(buffer->m_pCallback)
-                    buffer->m_pCallback(buffer->m_pData, buffer->m_pCallbackHint);
-                else if(buffer->m_nLength) {
-                    delete [] buffer->m_pData;
-                    v8::V8::AdjustAmountOfExternalAllocatedMemory(-(sizeof(SlowBuffer) + buffer->m_nLength));
-                }
-                
-                buffer->m_nLength = length;
-                buffer->m_pCallback = callback;
-                buffer->m_pCallbackHint = hint;
-                
-                if(buffer->m_pCallback) // If it's got a callback, use provided data.
-                    buffer->m_pData = data;
-                else if(length) {
-                    buffer->m_pData = new uint8_t [buffer->m_nLength];
-                    if(data)
-                        memcpy(buffer->m_pData, data, buffer->m_nLength);
-                    v8::V8::AdjustAmountOfExternalAllocatedMemory(sizeof(SlowBuffer) + buffer->m_nLength);
-                } else
-                    buffer->m_pData = 0;
-                
-                _this.to<v8::Handle<v8::Object>>()->SetIndexedPropertiesToExternalArrayData(buffer->m_pData, v8::kExternalUnsignedByteArray, buffer->m_nLength);
-                _this["length"] = buffer->m_nLength;
-            }
-
-            size_t m_nLength;
-            uint8_t *m_pData;
-            freeCallback m_pCallback;
-            void *m_pCallbackHint;
-    };*/
     
     // Returns number of bytes written.
     ssize_t decodeWrite(uint8_t *_buffer, size_t length, Value val, enum encoding encoding) {
