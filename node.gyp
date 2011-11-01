@@ -15,12 +15,14 @@
       'src/modules/console.js',
       'src/modules/constants.gear',
       'src/modules/events.js',
+      'src/modules/fs.gear',
       'src/modules/path.js',
       'src/modules/punycode.js',
       'src/modules/stream.js',
       'src/modules/sys.js',
       'src/modules/url.js',
       'src/modules/util.js',
+      
       #FIXME
       'src/modules/Io.gear',
     ],
@@ -31,12 +33,14 @@
       'src/modules/console.cc',
       'src/modules/constants.cc',
       'src/modules/events.cc',
+      'src/modules/fs.cc',
       'src/modules/path.cc',
       'src/modules/punycode.cc',
       'src/modules/stream.cc',
       'src/modules/sys.cc',
       'src/modules/url.cc',
       'src/modules/util.cc',
+      
       #FIXME
       'src/modules/Io.cc',
     ],
