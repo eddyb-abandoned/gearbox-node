@@ -37,7 +37,7 @@ namespace Gearbox {
             Value file(args[0]);
             
             TryCatch tryCatch;
-            String source = Module::require("Io")["read"](file);
+            String source = NativeModule::require("Io")["read"](file);
             
             // Report exceptions caught while reading the file
             if(tryCatch.hasCaught())
@@ -60,12 +60,6 @@ namespace Gearbox {
             return undefined;
         }
         THROW_ERROR("Invalid call to print");
-    }
-    
-    static v8::Handle<v8::Value> _require(const v8::Arguments& args) {
-        if(args.Length() >= 1)
-            return Module::require(Value(args[0]));
-        THROW_ERROR("Invalid call to require");
     }
     
     Context::Context() {
@@ -126,7 +120,7 @@ namespace Gearbox {
         _global["exit"] = Function(_exit, "exit");
         _global["load"] = Function(_load, "load");
         _global["print"] = Function(_print, "print");
-        _global["require"] = Function(_require, "require");
+        _global["require"] = NativeModule::getRequireFunc();
         
         _global["global"] = _global;
     }

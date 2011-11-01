@@ -19,37 +19,40 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef GEARBOX_MODULE_H
-#define GEARBOX_MODULE_H
+#ifndef GEARBOX_NATIVE_MODULE_H
+#define GEARBOX_NATIVE_MODULE_H
 
 #include <gearbox.h>
 
 #include <map>
 
 namespace Gearbox {
-    class Module {
+    class NativeModule {
         public:
-            typedef void (*SetupCallback)(Value exports);
+            typedef void (*SetupCallback)(Value, Value, Value);
             
-            Module(String moduleName, SetupCallback pSetupCallback);
+            NativeModule(String moduleName, SetupCallback pSetupCallback);
             
-            virtual ~Module();
+            virtual ~NativeModule();
             
-            Value require();
+            static Value require(String moduleName, Value requireFunc=undefined);
             
-            static Value require(String moduleName);
+            static Value getRequireFunc();
             
         private:
             String m_sModuleName;
             SetupCallback m_pSetupCallback;
             
-            Value m_Exports;
+            Value m_oModule;
             
-            static std::map<String, Module*> *m_pModules;
+            Value _require(Value requireFunc);
+            
+            static v8::Handle<v8::Value> require(const v8::Arguments& args);
+            
+            static std::map<String, NativeModule*> *m_pModules;
+            
+            static Value m_RequireFunc;
     };
-    inline Value require(String moduleName) {
-        return Module::require(moduleName);
-    }
 }
 
 #endif

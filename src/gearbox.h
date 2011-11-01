@@ -23,7 +23,6 @@
 #define GEARBOX_H
 
 #include <v8.h>
-#include "shell.h"
 
 namespace Gearbox {
     
@@ -37,7 +36,7 @@ namespace Gearbox {
 #include "Value.h"
 
 #include "Context.h"
-#include "Module.h"
+#include "NativeModule.h"
 #include "TryCatch.h"
 
 namespace Gearbox {

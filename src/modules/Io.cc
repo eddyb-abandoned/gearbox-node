@@ -72,8 +72,8 @@ static v8::Handle<v8::Value> _Io_exports_write(const v8::Arguments &args) {
 
 
 #line 74 "src/modules/Io.cc"
-static void _setup_Io(Value exports) {
+static void _setup_Io(Value exports, Value require, Value module) {
     exports["read"] = Function(_Io_exports_read, "read");
     exports["write"] = Function(_Io_exports_write, "write");
 }
-static Module _module_Io("Io", _setup_Io);
+static NativeModule _module_Io("Io", _setup_Io);
