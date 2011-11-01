@@ -10,6 +10,7 @@
     'node_use_system_openssl%': 'false',
     'gear_files': [
       'src/modules/assert.js',
+      'src/modules/buffer.gear',
       'src/modules/buffer_ieee754.js',
       'src/modules/console.js',
       'src/modules/constants.gear',
@@ -25,6 +26,7 @@
     ],
     'gear_output': [
       'src/modules/assert.cc',
+      'src/modules/buffer.cc',
       'src/modules/buffer_ieee754.cc',
       'src/modules/console.cc',
       'src/modules/constants.cc',

@@ -122,6 +122,11 @@ namespace Gearbox {
         _global["print"] = Function(_print, "print");
         _global["require"] = NativeModule::getRequireFunc();
         
+        // FIXME this is a temp hack
+        _global["process"] = Object();
+        
         _global["global"] = _global;
+        
+        _global["Buffer"] = NativeModule::require("buffer")["Buffer"];
     }
 }
