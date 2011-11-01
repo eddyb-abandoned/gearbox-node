@@ -3,12 +3,12 @@ var $aze = new codeaze.Codeaze();
 
 
 function createClass(name, childs, line, inheritList) {
-    var out = {type:'class', name:name, inheritList:inheritList, classes:{}, vars:{}, staticVars:{}, functions:{}, staticFunctions:{}, accessors:{}};
+    var out = {type:'class', name:name, inheritList:inheritList, classes:{}, vars:{}, nativeVars:{}, staticVars:{}, functions:{}, staticFunctions:{}, accessors:{}};
     for(c in childs) {
         var node = childs[c];
         switch(node.type) {
             case 'class':
-                out.classes[node.name] = {classes:node.classes, vars:node.vars, staticVars:node.staticVars, functions:node.functions, staticFunctions:node.staticFunctions, accessors:node.accessors};
+                out.classes[node.name] = {classes:node.classes, vars:node.vars, nativeVars:node.nativeVars, staticVars:node.staticVars, functions:node.functions, staticFunctions:node.staticFunctions, accessors:node.accessors};
                 break;
             case 'function':
                 if(!out.functions[node.name])
@@ -24,6 +24,9 @@ function createClass(name, childs, line, inheritList) {
                 break;
             case 'var':
                 out.vars[node.name] = {val:node.val};
+                break;
+            case 'native-var':
+                out.nativeVars[node.name] = {type:node._type, val:node.val};
                 break;
             case 'static-var':
                 out.staticVars[node.name] = {val:node.val};
@@ -62,9 +65,9 @@ function createObject(name, childs, line, isModule) {
                 break;
             case 'class':
                 if(node.inheritList) {
-                    var baseNode = {classes:{}, vars:{}, staticVars:{}, functions:{}, staticFunctions:{}, accessors:{}};
+                    var baseNode = {classes:{}, vars:{}, nativeVars:{}, staticVars:{}, functions:{}, staticFunctions:{}, accessors:{}};
                     function extend(x, nn) {
-                    for(var j in x)
+                        for(var j in x)
                             if(j in baseNode)
                                 for(var k in x[j])
                                     if(!(j == 'functions' && k == nn))
@@ -76,7 +79,7 @@ function createObject(name, childs, line, isModule) {
                     out.classes[node.name] = baseNode;
                 }
                 else
-                    out.classes[node.name] = {classes:node.classes, vars:node.vars, staticVars:node.staticVars, functions:node.functions, staticFunctions:node.staticFunctions, accessors:node.accessors};
+                    out.classes[node.name] = {classes:node.classes, vars:node.vars, nativeVars:node.nativeVars, staticVars:node.staticVars, functions:node.functions, staticFunctions:node.staticFunctions, accessors:node.accessors};
                 break;
             case 'function':
                 if(!out.functions.hasOwnProperty(node.name))
@@ -117,8 +120,10 @@ $aze.symbols.module = new codeaze.Symbol('l/module/ +identifier /{/ moduleConten
 $aze.symbols.moduleContents = new codeaze.Symbol('( +|object|nativeBlock)*', function($){var $$;$$=$[0].map(function(x){return x[0]}).filter(function(x){return !x.length});return $$;});
 $aze.symbols.object = new codeaze.Symbol('l/object/ +identifier /{/ objectContents /}/', function($){var $$;$$=createObject($[3], $[7], $[0], false);return $$;});
 $aze.symbols.objectContents = new codeaze.Symbol('( +|object|class|variableDef|function|getter|setter|nativeBlock)*', function($){var $$;$$=$[0].map(function(x){return x[0]}).filter(function(x){return !x.length});return $$;});
-$aze.symbols.class = new codeaze.Symbol('l/class/ +identifier( /:/ identifierList)? /{/ objectContents /}/', function($){var $$;$$=createClass($[3], $[8], $[0], $[4]&&$[4][3]);return $$;});
+$aze.symbols.class = new codeaze.Symbol('l/class/ +identifier( /:/ identifierList)? /{/ classContents /}/', function($){var $$;$$=createClass($[3], $[8], $[0], $[4]&&$[4][3]);return $$;});
+$aze.symbols.classContents = new codeaze.Symbol('( +|object|class|variableDef|nativeVar|function|getter|setter|nativeBlock)*', function($){var $$;$$=$[0].map(function(x){return x[0]}).filter(function(x){return !x.length});return $$;});
 $aze.symbols.variableDef = new codeaze.Symbol('l(/static/ )?/var/ +identifier /=/ nativeCodeInline /;/', function($){var $$;$$={type:$[1]?'static-var':'var', name:$[4], val:$[8]};return $$;});
+$aze.symbols.nativeVar = new codeaze.Symbol('l/native/ +identifier( /[*]*/ | +)identifier (/=/ nativeCodeInline )?/;/', function($){var $$;$$={type:'native-var', name:$[5], _type:$[3]+' '+($[4][1]||''), val:$[7] ? $[7][2] : null};return $$;});
 $aze.symbols.function = new codeaze.Symbol('l(/static/ )?(/function/ +)?identifier /\\(/ identifierList /\\)/ /{/nativeCode/}/', function($){var $$;$$={type:$[1]?'static-function':'function', name:$[3], args:$[7], code:$[12], line:$[0]};return $$;});
 $aze.symbols.getter = new codeaze.Symbol('l/get/ +identifier /\\(/ /\\)/ /{/nativeCode/}/', function($){var $$;$$={type:'getter', name:$[3], args:[], code:$[10], line:$[0]};return $$;});
 $aze.symbols.setter = new codeaze.Symbol('l/set/ +identifier /\\(/ identifier /\\)/ /{/nativeCode/}/', function($){var $$;$$={type:'setter', name:$[3], args:[$[7]], code:$[12], line:$[0]};return $$;});
@@ -176,8 +181,12 @@ function generateFunctionCode(functions, name, parentPrefix, parentPath, code, _
         }
     }
     
-    if(_class)
-        funcCode = '\n\tValue This(args.This());'+funcCode;
+    if(_class) {
+        if(_class.wrapName)
+            funcCode = '\n\t'+_class.wrapName+'::This This(args.This()'+(ctor?', new '+_class.wrapName:'')+');'+funcCode;
+        else
+            funcCode = '\n\tValue This(args.This());'+funcCode;
+    }
     
     if(!hasNoArgsVer)
         funcCode += '\tTHROW_ERROR("Invalid call to ' + parentPrefix.replace(/_/g, '.').replace(/^\./, '') + (ctor ? '' : (_class?'.prototype':'') + '.' + name) + '");\n';
@@ -193,6 +202,36 @@ function generateClassCode(_class, name, parentPrefix, parentPath, code) {
     var prefix = parentPrefix + '_' + name, path = parentPath + '["' + name + '"]';
     
     code.addClass(prefix, name);
+    
+    // Do we need an Wrap struct?
+    if(('~'+name in _class.functions) || Object.keys(_class.nativeVars).length) {
+        _class.wrapName = prefix+'_wrap';
+        var wrap = 'struct '+_class.wrapName+' /*: public Value::DtorWrap*/ {\n';
+        for(var i in _class.nativeVars)
+            wrap += '\t'+_class.nativeVars[i].type+i+';\n';
+        
+        wrap += '\n\tstruct This : public Value {\n';
+        
+        wrap += '\t\tThis(v8::Handle<v8::Object> &&_this, '+_class.wrapName+' *wrap) : Value(_this), _wrap(wrap)';
+        for(var i in _class.nativeVars)
+            wrap += ', '+i+'(wrap->'+i+')';
+        wrap += ' {\n\t\t\t_this->SetPointerInInternalField(0, wrap);\n\t\t}\n';
+        
+        wrap += '\t\tThis(v8::Handle<v8::Object> &&_this) : Value(_this), _wrap(static_cast<'+_class.wrapName+'*>(_this->GetPointerFromInternalField(0)))';
+        for(var i in _class.nativeVars)
+            wrap += ', '+i+'(_wrap->'+i+')';
+        wrap += ' {}\n';
+        
+        wrap += '\t\t'+_class.wrapName+' *_wrap;\n';
+        for(var i in _class.nativeVars)
+            wrap += '\t\t'+_class.nativeVars[i].type+'&'+i+';\n';
+        wrap += '\t};\n';
+        
+        wrap += '};\n\n';
+        
+        code.func += wrap;
+        code.setInternalFieldCount(prefix, 1);
+    }
     
     for(funcName in _class.functions) {
         if(funcName != name)
@@ -280,8 +319,11 @@ function generateCode(gear, global) {
         setPrototypeAccessor: function(parentObjName, name, getter, setter) {
             this.init += '\t' + parentObjName + '->PrototypeTemplate()->SetAccessor(String("' + name + '"), ' + getter + (setter?', '+getter:'') + ');\n';
         },
+        setInternalFieldCount: function(parentObjName, value) {
+            this.init += '\t' + parentObjName + '->InstanceTemplate()->SetInternalFieldCount(' + value + ');\n';
+        },
         addJS: function(name, js, args) {
-            args = args.join(', ');
+        args = args.join(', ');
             js = '(function('+args+'){'+js+'})'; // TODO minify
             this.init += '\tContext::getCurrent()->runScript(' + JSON.stringify(js) + ', "' + name + '")('+args+');\n';
         },
@@ -297,11 +339,7 @@ function generateCode(gear, global) {
     }
     
     var license = getBlock(global, 'license'), top = getBlock(global, 'top'), header = getBlock(global, 'header');
-    var ccCode = license+'\
-#include <gearbox.h>\n\
-\n\
-using namespace Gearbox;\n\
-\n\
+    var ccCode = license+'#include <gearbox.h>\n'+(global.nativeBlocks.header?'#include "'+gear.h.replace(/^([^/]*\/)+/,'')+'"\n':'')+'\nusing namespace Gearbox;\n\n\
 /** \\file '+gear.baseName+'.cc converted from '+gear.src+' */\n'+makeLine('',1) + '\n' + top;
 
     for(var i = 0; i < modules.length; i++) {
@@ -314,7 +352,7 @@ using namespace Gearbox;\n\
         
         if(module.nativeBlocks.js) {
             /// function (exports, require, module, __filename, __dirname)
-            var args = ['exports'];
+            var args = ['exports', 'require', 'module'];
             for(var j in module.objects)
                 if(args.indexOf(j) === -1)
                     args.push(j);
@@ -322,19 +360,19 @@ using namespace Gearbox;\n\
         }
         
         ccCode += makeLine('',nLines(ccCode)+2).replace('.gear','.cc') + '\n\
-static void _setup_' + moduleName + '(Value exports) {\n' + code.init + '}\n\
-static Module _module_' + moduleName + '("'+moduleName+'", _setup_' + moduleName + ');';
+static void _setup_' + moduleName + '(Value exports, Value require, Value module) {\n' + code.init + '}\n\
+static NativeModule _module_' + moduleName + '("'+moduleName+'", _setup_' + moduleName + ');';
     }
     ccCode = ccCode.replace(/\t/g, '    ');
     io.write(gear.cc, ccCode);
-    /*
-     v ar hCode = license+'\    *
-     #ifndef GEARBOX_MODULES_'+baseName.toUpperCase()+'_H\n\
-     #define GEARBOX_MODULES_'+baseName.toUpperCase()+'_H\n\n\
-     #include <gearbox.h>\n\n'+header+
-     //void Setup'+baseName+'(v8::Handle<v8::Object> global);\n\n\
-     '#endif\n';
-    io.write(gear.h, hCode);*/
+    
+    if(global.nativeBlocks.header) {
+        var hCode = license+'\
+#ifndef GEARBOX_MODULES_'+baseName.replace(/^([^/]*\/)+/,'').toUpperCase()+'_H\n\
+#define GEARBOX_MODULES_'+baseName.replace(/^([^/]*\/)+/,'').toUpperCase()+'_H\n\n\
+#include <gearbox.h>\n\n'+header+'#endif\n';
+        io.write(gear.h, hCode);
+    }
 }
 
 $aze.spaceIgnore = false;
@@ -343,7 +381,7 @@ if(arguments.length > 1) {
     for(var i = 1; i < arguments.length; i++) {
         l = 1;
         var lastDot = arguments[i].lastIndexOf('.'), lastSlash = arguments[i].lastIndexOf('/')+1, baseName = arguments[i].substr(0, lastDot), ext = arguments[i].substr(lastDot+1);
-        var gear = {src:arguments[i], baseName:baseName, cc:baseName+'.cc'/*, h:baseDir+baseName+'.h'*/};
+        var gear = {src:arguments[i], baseName:baseName, cc:baseName+'.cc', h:baseName+'.h'};
         var src = io.read(arguments[i]);
         if(ext == 'gear')
             generateCode(gear, createObject('', $aze.parse(src), 1));
