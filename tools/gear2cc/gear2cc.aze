@@ -49,8 +49,8 @@
         return out;
     }
 
-    function createObject(name, childs, line, isModule) {
-        var out = {type:isModule?'module':'object', name:name, objects:{}, modules:{}, classes:{}, vars:{}, functions:{}, nativeBlocks:{}};
+    function createObject(name, childs, line, type) {
+        var out = {type:type, name:name, objects:{}, modules:{}, classes:{}, vars:{}, functions:{}, nativeSetups:{}, nativeBlocks:{}};
         for(c in childs) {
             var node = childs[c];
             switch(node.type) {
@@ -87,13 +87,16 @@
                 case 'var':
                     out.vars[node.name] = {val:node.val};
                     break;
+                case 'native-setup':
+                    out.nativeSetups[node.name] = {args:node.args, objects:node.objects, classes:node.classes, vars:node.vars, functions:node.functions, nativeBlocks:node.nativeBlocks};
+                    break;
                 case 'native-block':
                     out.nativeBlocks[node.which] = out.nativeBlocks[node.which] ? (out.nativeBlocks[node.which] + '\n' + node.code) : node.code;
             }
         }
         
         //if(!out.functions.hasOwnProperty('toString'))
-        //    out.functions['toString'] = [{args:[], code:'return String("['+(isModule?'module':'object')+' '+name+']");', line:line}];
+        //    out.functions['toString'] = [{args:[], code:'return String("['+type+' '+name+']");', line:line}];
         
         return out;
     }
@@ -116,10 +119,10 @@ bulkCode: /(\/\/.*|\/\*.*?\*\/|[^;{}()]+)/ {l+=nLines($0);$$=$0};
 nativeCodeInline: `(bulkCode|/\(/nativeCodeInline/\)/)*` {$$=$0.map(function(x){return x.length>1?x[0][0]+x[1]+x[2][0]:x[0]}).reduce(sum,'')};
 nativeCode: `(bulkCode|/;/|/{/nativeCode/}/|/\(/nativeCode/\)/)*` {$$=$0.map(function(x){return x.length>1?x[0][0]+x[1]+x[2][0]:(x[0][0]==';'?';':x[0])}).reduce(sum,'')};
 
-module: `l/module/ +identifier /{/ moduleContents /}/` {$$=createObject($3, $7, $0, true)};
+module: `l/module/ +identifier /{/ moduleContents /}/` {$$=createObject($3, $7, $0, 'module')};
 moduleContents: `( +|object|nativeBlock)*` {$$=$0.map(function(x){return x[0]}).filter(function(x){return !x.length})};
 
-object: `l/object/ +identifier /{/ objectContents /}/` {$$=createObject($3, $7, $0, false)};
+object: `l/object/ +identifier /{/ objectContents /}/` {$$=createObject($3, $7, $0, 'object')};
 objectContents: `( +|object|class|variableDef|function|getter|setter|nativeBlock)*` {$$=$0.map(function(x){return x[0]}).filter(function(x){return !x.length})};
 
 class: `l/class/ +identifier( /:/ identifierList)? /{/ classContents /}/` {$$=createClass($3, $8, $0, $4&&$4[3])};
@@ -132,7 +135,9 @@ getter: `l/get/ +identifier /\(/ /\)/ /{/nativeCode/}/` {$$={type:'getter', name
 setter: `l/set/ +identifier /\(/ identifier /\)/ /{/nativeCode/}/` {$$={type:'setter', name:$3, args:[$7], code:$12, line:$0}};
 nativeBlock: `l,identifier /{/nativeCode/}/` {$$={type:'native-block', which:$1, code:$4, line:$0}};
 
-main: `( +|module|nativeBlock)*` {$$=$0.map(function(x){return x[0]}).filter(function(x){return !x.length})};
+nativeSetup: `l/native/ +identifier /\(/ identifierList /\)/ /{/ moduleContents /}/` {$$=createObject($3, $13, $0, 'native-setup'),$$.args=$7};
+
+main: `( +|module|nativeSetup|nativeBlock)*` {$$=$0.map(function(x){return x[0]}).filter(function(x){return !x.length})};
 
 {
 
@@ -300,6 +305,15 @@ main: `( +|module|nativeBlock)*` {$$=$0.map(function(x){return x[0]}).filter(fun
         
         if(object.nativeBlocks.postSetup)
             code.init += object.nativeBlocks.postSetup;
+        
+        if(object.nativeBlocks.js) {
+            /// function(exports, require, module, __filename, __dirname)
+            var args = object.args ? object.args.slice() : ['exports', 'require', 'module'];
+            for(var j in object.objects)
+                if(args.indexOf(j) === -1)
+                    args.push(j);
+            code.addJS('gear:'+name, object.nativeBlocks.js, args);
+        }
     }
 
     function generateCode(gear, global) {
@@ -334,11 +348,6 @@ main: `( +|module|nativeBlock)*` {$$=$0.map(function(x){return x[0]}).filter(fun
             },
         };
         
-        var modules = Object.keys(global.modules);
-        
-        if(!modules.length)
-            throw Error('No modules');
-        
         function getBlock(o, n) {
             return o.nativeBlocks[n] ? (o.nativeBlocks[n].trim().replace(/\n    /g, '\n') + '\n\n') : '\n';
         }
@@ -347,29 +356,23 @@ main: `( +|module|nativeBlock)*` {$$=$0.map(function(x){return x[0]}).filter(fun
         var ccCode = license+'#include <gearbox.h>\n'+(global.nativeBlocks.header?'#include "'+gear.h.replace(/^([^/]*\/)+/,'')+'"\n':'')+'\nusing namespace Gearbox;\n\n\
 /** \\file '+gear.baseName+'.cc converted from '+gear.src+' */\n'+makeLine('',1) + '\n' + top;
     
-        for(var i = 0; i < modules.length; i++) {
+        for(var name in global.modules) {
             code.func = code.init = '';
-            
-            var moduleName = modules[i], module = global.modules[moduleName];
-            generateModuleCode(module, moduleName, '', '', code);
-            
+            generateModuleCode(global.modules[name], name, '', '', code);
             ccCode += code.func;
-            
-            if(module.nativeBlocks.js) {
-                /// function (exports, require, module, __filename, __dirname)
-                var args = ['exports', 'require', 'module'];
-                for(var j in module.objects)
-                    if(args.indexOf(j) === -1)
-                        args.push(j);
-                code.addJS('gear:'+moduleName, module.nativeBlocks.js, args);
-            }
-            
-            ccCode += makeLine('',nLines(ccCode)+2).replace('.gear','.cc') + '\n\
-static void _setup_' + moduleName + '(Value exports, Value require, Value module) {\n' + code.init + '}\n\
-static NativeModule _module_' + moduleName + '("'+moduleName+'", _setup_' + moduleName + ');';
+            ccCode += makeLine('',nLines(ccCode)+2).replace('.gear','.cc') + '\n'+
+                'static void _setup_' + name + '(Value exports, Value require, Value module) {\n' + code.init + '}\n'+
+                'static NativeModule _module_' + name + '("'+name+'", _setup_' + name + ');';
         }
-        ccCode = ccCode.replace(/\t/g, '    ');
-        fs.writeFileSync(gear.cc, ccCode);
+        for(var name in global.nativeSetups) {
+            code.func = code.init = '';
+            generateModuleCode(global.nativeSetups[name], name, '', '', code);
+            ccCode += code.func;
+            ccCode += makeLine('',nLines(ccCode)+2).replace('.gear','.cc') + '\n'+
+                'void '+name+'('+global.nativeSetups[name].args.map(function(x){return 'Value '+x}).join(', ')+') {\n' + code.init + '}\n';
+        }
+        
+        fs.writeFileSync(gear.cc, ccCode.replace(/\t/g, '    '));
         
         if(global.nativeBlocks.header) {
             var hCode = license+'\

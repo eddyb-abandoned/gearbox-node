@@ -35,6 +35,14 @@ namespace Gearbox {
                 return m_hContext->Global();
             }
             
+            void setSandbox(Value sandbox) {
+                Value sandboxNames = sandbox.to<v8::Handle<v8::Object>>()->GetPropertyNames(), _global = global();
+                for(size_t i = 0, length = sandboxNames.length(); i < length; i++) {
+                    String name = sandboxNames[i].to<String>();
+                    _global[name] = sandbox[name];
+                }
+            }
+            
             Value runScript(String source, String name);
             
             static Context *getCurrent() {
@@ -42,7 +50,6 @@ namespace Gearbox {
             }
             
         private:
-            virtual void setup();
             
             v8::Persistent<v8::Context> m_hContext;
             

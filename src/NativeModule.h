@@ -29,15 +29,29 @@
 namespace Gearbox {
     class NativeModule {
         public:
-            typedef void (*SetupCallback)(Value, Value, Value);
+            typedef void (*SetupCallback)(Value exports, Value require, Value module);
             
-            NativeModule(String moduleName, SetupCallback pSetupCallback);
+            NativeModule(String moduleName, SetupCallback pSetupCallback) : m_sModuleName(moduleName), m_pSetupCallback(pSetupCallback) {
+                fixMap();
+                (*m_pModules)[moduleName] = this;
+            }
             
-            virtual ~NativeModule();
+            virtual ~NativeModule() {
+                m_pModules->erase(m_sModuleName);
+            }
             
-            static Value require(String moduleName, Value requireFunc=undefined);
+            static Value require(String moduleName, Value requireFunc) {
+                if(!exists(moduleName))
+                    THROW_ERROR("NativeModule "+moduleName+" doesn't exist");
+                
+                return (*m_pModules)[moduleName]->_require(requireFunc);
+            }
             
-            static Value getRequireFunc();
+            static bool exists(String moduleName) {
+                fixMap();
+                
+                return m_pModules->count(moduleName);
+            }
             
         private:
             String m_sModuleName;
@@ -47,11 +61,12 @@ namespace Gearbox {
             
             Value _require(Value requireFunc);
             
-            static v8::Handle<v8::Value> require(const v8::Arguments& args);
+            static void fixMap() {
+                if(!m_pModules)
+                    m_pModules = new std::map<String, NativeModule*>();
+            }
             
             static std::map<String, NativeModule*> *m_pModules;
-            
-            static Value m_RequireFunc;
     };
 }
 

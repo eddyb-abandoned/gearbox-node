@@ -35,15 +35,13 @@ namespace Gearbox {
 #include "String.h"
 #include "Value.h"
 
-#include "Context.h"
-#include "NativeModule.h"
 #include "TryCatch.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 namespace Gearbox {
     
-    static void PrintTrace() { 
+    static void printTrace() { 
         v8::Message::PrintCurrentStackTrace(stdout);
     }
 
@@ -98,5 +96,8 @@ namespace Gearbox {
     typedef Value var;
     
 }
+
+#include "Context.h"
+#include "NativeModule.h"
 
 #endif

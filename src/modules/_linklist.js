@@ -1,4 +1,4 @@
-// Copyright (c) 2011 the gearbox-node project authors.
+// Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the
@@ -19,18 +19,58 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <gearbox.h>
-
-namespace Gearbox {
-    std::map<String, NativeModule*> *NativeModule::m_pModules = 0;
-    
-    Value NativeModule::_require(Value requireFunc) {
-        if(m_oModule == undefined) {
-            m_oModule = Object();
-            var exports = Object();
-            m_oModule["exports"] = exports;
-            m_pSetupCallback(exports, requireFunc, m_oModule);
-        }
-        return m_oModule["exports"];
-    }
+function init(list) {
+  list._idleNext = list;
+  list._idlePrev = list;
 }
+exports.init = init;
+
+
+// show the most idle item
+function peek(list) {
+  if (list._idlePrev == list) return null;
+  return list._idlePrev;
+}
+exports.peek = peek;
+
+
+// remove the most idle item from the list
+function shift(list) {
+  var first = list._idlePrev;
+  remove(first);
+  return first;
+}
+exports.shift = shift;
+
+
+// remove a item from its list
+function remove(item) {
+  if (item._idleNext) {
+    item._idleNext._idlePrev = item._idlePrev;
+  }
+
+  if (item._idlePrev) {
+    item._idlePrev._idleNext = item._idleNext;
+  }
+
+  item._idleNext = null;
+  item._idlePrev = null;
+}
+exports.remove = remove;
+
+
+// remove a item from its list and place at the end.
+function append(list, item) {
+  remove(item);
+  item._idleNext = list._idleNext;
+  list._idleNext._idlePrev = item;
+  item._idlePrev = list;
+  list._idleNext = item;
+}
+exports.append = append;
+
+
+function isEmpty(list) {
+  return list._idleNext === list;
+}
+exports.isEmpty = isEmpty;

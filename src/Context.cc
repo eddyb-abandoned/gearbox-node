@@ -21,25 +21,8 @@
 
 #include <gearbox.h>
 
-#include <cstdlib>
-
 namespace Gearbox {
     Context *Context::m_pCurrentContext = 0;
-    
-    static v8::Handle<v8::Value> _exit(const v8::Arguments& args) {
-        std::_Exit(Value(args[0]));
-        return undefined;
-    }
-    
-    static v8::Handle<v8::Value> _print(const v8::Arguments& args) {
-        if(args.Length()) {
-            for(int i = 0; i < args.Length(); i++)
-                std::cout << (i ? " " : "") << Value(args[i]).to<String>();
-            std::cout << std::endl;
-            return undefined;
-        }
-        THROW_ERROR("Invalid call to print");
-    }
     
     Context::Context() {
         // Save the previous context
@@ -53,9 +36,6 @@ namespace Gearbox {
         
         // We're in this context
         m_pCurrentContext = this;
-        
-        // Setup the context
-        setup();
     }
     
     Context::~Context() {
@@ -90,21 +70,5 @@ namespace Gearbox {
         
         // Return the result
         return result;
-    }
-    
-    void Context::setup() {
-        // Get the global object
-        var _global = global();
-        
-        _global["exit"] = Function(_exit, "exit");
-        _global["print"] = Function(_print, "print");
-        _global["require"] = NativeModule::getRequireFunc();
-        
-        // FIXME this is a temp hack
-        _global["process"] = Object();
-        
-        _global["global"] = _global;
-        
-        _global["Buffer"] = NativeModule::require("buffer")["Buffer"];
     }
 }

@@ -340,6 +340,9 @@ bool operator OP(Primitive that) { \
             Assignable<Value, uint32_t> operator[](int32_t idx) const {
                 return Assignable<Value, uint32_t>(*this, idx);
             }
+            Assignable<Value, uint32_t> operator[](size_t idx) const {
+                return Assignable<Value, uint32_t>(*this, idx);
+            }
             Assignable<Value, v8::Handle<v8::String>> operator[](const char *idx) const {
                 return Assignable<Value, v8::Handle<v8::String>>(*this, v8::String::NewSymbol(idx));
             }
@@ -400,10 +403,18 @@ bool operator OP(Primitive that) { \
                 if(m_hValue.IsEmpty() || !m_hValue->IsFunction())
                     return undefined;
                 
-                ValueList args;
-                args.add(_args...);
+                v8::Handle<v8::Value> args[sizeof...(_args)];
+                placeArgs(args, _args...);
                 
-                return v8::Handle<v8::Function>::Cast(m_hValue)->Call(_this, args.numValues(), args.values());
+                // Exceptions can be thrown, we are inside JavaScript
+                bool bCanThrowBefore = tryCatchCanThrow(true);
+                
+                Value result = v8::Handle<v8::Function>::Cast(m_hValue)->Call(_this, sizeof...(_args), args);
+                
+                // We are back from JavaScript
+                tryCatchCanThrow(bCanThrowBefore);
+                
+                return result;
             }
             
             /** New Instance for Functions */
@@ -412,52 +423,31 @@ bool operator OP(Primitive that) { \
                 if(m_hValue.IsEmpty() || !m_hValue->IsFunction())
                     return undefined;
                 
-                ValueList args;
-                args.add(_args...);
+                v8::Handle<v8::Value> args[sizeof...(_args)];
+                placeArgs(args, _args...);
                 
-                return v8::Handle<v8::Function>::Cast(m_hValue)->NewInstance(args.numValues(), args.values());
+                // Exceptions can be thrown, we are inside JavaScript
+                bool bCanThrowBefore = tryCatchCanThrow(true);
+                
+                Value result = v8::Handle<v8::Function>::Cast(m_hValue)->NewInstance(sizeof...(_args), args);
+                
+                // We are back from JavaScript
+                tryCatchCanThrow(bCanThrowBefore);
+                
+                return result;
             }
             
         private:
-        
-            class ValueList {
-                public:
-                    ValueList() : m_nValues(0) {}
-                    ~ValueList() {
-                        if(m_nValues)
-                            delete [] m_phValues;
-                    }
-                    
-                    template <class First, class... Last>
-                    void add(First first, Last... last) {
-                        push(first);
-                        add(last...);
-                    }
-                    
-                    void add() {}
-                    
-                    v8::Handle<v8::Value> *values() {
-                        return m_phValues;
-                    }
-                    
-                    size_t numValues() {
-                        return m_nValues;
-                    }
-                    
-                private:
-                    void push(Value value) {
-                        v8::Handle<v8::Value> *phOldValues = m_phValues;
-                        m_phValues = new v8::Handle<v8::Value> [m_nValues + 1];
-                        
-                        for(size_t i = 0; i < m_nValues; i++)
-                            m_phValues[i] = phOldValues[i];
-                        
-                        m_phValues[m_nValues++] = value;
-                    }
-                    
-                    v8::Handle<v8::Value> *m_phValues;
-                    size_t m_nValues;
-            };
+            template <class... Last>
+            static void placeArgs(v8::Handle<v8::Value> *pValues, Value first, Last... last) {
+                *pValues = first;
+                placeArgs(pValues + 1, last...);
+            }
+            
+            static void placeArgs(v8::Handle<v8::Value> *pValues) {}
+            
+            /// FIXME Hack to get TryCatch::canThrow into call and newInstance.
+            static bool tryCatchCanThrow(bool);
             
             static void weakCallback(v8::Persistent<v8::Value>, void*);
             
@@ -467,6 +457,14 @@ bool operator OP(Primitive that) { \
             friend class Assignable<Value, uint32_t>;
             friend class Assignable<Value, String>;
     };
+}
+
+#include "TryCatch.h"
+
+namespace Gearbox {
+    inline bool Value::tryCatchCanThrow(bool bCanThrow) {
+        return TryCatch::canThrow(bCanThrow);
+    }
 }
 
 #endif
