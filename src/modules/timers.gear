@@ -23,40 +23,22 @@ license {
 }
 
 top {
-    #include <assert.h>
-    #include <uv.h>
-    
-    template <typename T>
-    static void stateChange(T &This) {
-        bool was_active = This._active;
-        This._active = uv_is_active(reinterpret_cast<uv_handle_t*>(&This._handle));
-        
-        if(!was_active && This._active) {
-            // If our state is changing from inactive to active, we
-            // increase the loop's reference count.
-            uv_ref(uv_default_loop());
-        } else if(was_active && !This._active) {
-            // If our state is changing from active to inactive, we
-            // decrease the loop's reference count.
-            uv_unref(uv_default_loop());
-        }
-    }
+    #include <UvCommon.h>
 }
 
 module timers {
     object timer_wrap {
         class Timer {
-            native uv_timer_t _handle;
-            native bool _active;
+            native uv_timer_t handle;
+            native bool unref;
+            native bool active;
             
             Timer() {
-                this._active = false;
+                this.active = false;
+                assert(uv_timer_init(uv_default_loop(), &this.handle) == 0);
                 
-                int r = uv_timer_init(uv_default_loop(), &this._handle);
-                assert(r == 0);
-                
-                //FIXME Will this even work? It would never be dereferenced.
-                this._handle.data = new decltype(this)(this);
+                //FIXME Will this even work? It would never be cleaned up.
+                this.handle.data = new decltype(this)(this);
                 
                 // uv_timer_init adds a loop reference. (That is, it calls uv_ref.) This
                 // is not the behavior we want in Node. Timers should not increase the
@@ -64,44 +46,49 @@ module timers {
                 uv_unref(uv_default_loop());
             }
             
+            unref()
+                Uv::Handle::unref(this);
+            close()
+                Uv::Handle::close(this);
+            
             start(timeout, repeat) {
                 typedef decltype(this) Timer;
-                int r = uv_timer_start(&this._handle, [](uv_timer_t *handle, int status) {
+                int r = uv_timer_start(&this.handle, [](uv_timer_t *handle, int status) {
                     Timer *timer = static_cast<Timer*>(handle->data);
-                    stateChange(*timer);
+                    Uv::Handle::stateChange(*timer);
                     (*timer)["ontimeout"](status);
                 }, timeout, repeat);
                 
                 // Error starting the timer.
-                //if(r) SetErrno(uv_last_error(uv_default_loop())); // FIXME SetErrno
+                //if(r) SetErrno(uv_last_error(uv_default_loop())); //FIXME SetErrno
                 
-                stateChange(this);
+                Uv::Handle::stateChange(this);
                 return Integer(r);
             }
             stop() {
-                int r = uv_timer_stop(&this._handle);
+                int r = uv_timer_stop(&this.handle);
                 
-                //if(r) SetErrno(uv_last_error(uv_default_loop())); // FIXME SetErrno
+                //if(r) SetErrno(uv_last_error(uv_default_loop())); //FIXME SetErrno
                 
-                stateChange(this);
+                Uv::Handle::stateChange(this);
                 return Integer(r);
             }
             
             again() {
-                int r = uv_timer_again(&this._handle);
+                int r = uv_timer_again(&this.handle);
                 
-                //if(r) SetErrno(uv_last_error(uv_default_loop())); // FIXME SetErrno
+                //if(r) SetErrno(uv_last_error(uv_default_loop())); //FIXME SetErrno
                 
-                stateChange(this);
+                Uv::Handle::stateChange(this);
                 return Integer(r);
             }
             
             setRepeat(repeat) {
-                uv_timer_set_repeat(&this._handle, repeat);
+                uv_timer_set_repeat(&this.handle, repeat);
                 return Integer(0);
             }
             getRepeat() {
-                int64_t repeat = uv_timer_get_repeat(&this._handle);
+                int64_t repeat = uv_timer_get_repeat(&this.handle);
                 
                 //if(repeat < 0) SetErrno(uv_last_error(uv_default_loop())); // FIXME SetErrno
                 

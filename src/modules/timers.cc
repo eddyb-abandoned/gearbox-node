@@ -1,3 +1,5 @@
+#line 1 "src/modules/timers.gear"
+
 // Copyright Joyent, Inc. and other Node contributors.
 //           (c) 2011 the gearbox-node project authors.
 //
@@ -26,51 +28,35 @@ using namespace Gearbox;
 
 /** \file src/modules/timers.cc converted from src/modules/timers.gear */
 
-#line 1 "src/modules/timers.gear"
-#include <assert.h>
-#include <uv.h>
+#line 25 "src/modules/timers.gear"
 
-template <typename T>
-static void stateChange(T &This) {
-    bool was_active = This._active;
-    This._active = uv_is_active(reinterpret_cast<uv_handle_t*>(&This._handle));
-    
-    if(!was_active && This._active) {
-        // If our state is changing from inactive to active, we
-        // increase the loop's reference count.
-        uv_ref(uv_default_loop());
-    } else if(was_active && !This._active) {
-        // If our state is changing from active to inactive, we
-        // decrease the loop's reference count.
-        uv_unref(uv_default_loop());
-    }
-}
+#include <UvCommon.h>
 
 struct _timers_timer_wrap_Timer_wrap /*: public Value::DtorWrap*/ {
-    uv_timer_t _handle;
-    bool _active;
+    uv_timer_t handle;
+    bool unref;
+    bool active;
 
     struct This : public Value {
-        This(v8::Handle<v8::Object> &&_this, _timers_timer_wrap_Timer_wrap *wrap) : Value(_this), _wrap(wrap), _handle(wrap->_handle), _active(wrap->_active) {
+        This(v8::Handle<v8::Object> &&_this, _timers_timer_wrap_Timer_wrap *wrap) : Value(_this), _wrap(wrap), handle(wrap->handle), unref(wrap->unref), active(wrap->active) {
             _this->SetPointerInInternalField(0, wrap);
         }
-        This(v8::Handle<v8::Object> &&_this) : Value(_this), _wrap(static_cast<_timers_timer_wrap_Timer_wrap*>(_this->GetPointerFromInternalField(0))), _handle(_wrap->_handle), _active(_wrap->_active) {}
+        This(v8::Handle<v8::Object> &&_this) : Value(_this), _wrap(static_cast<_timers_timer_wrap_Timer_wrap*>(_this->GetPointerFromInternalField(0))), handle(_wrap->handle), unref(_wrap->unref), active(_wrap->active) {}
         _timers_timer_wrap_Timer_wrap *_wrap;
-        uv_timer_t &_handle;
-        bool &_active;
+        uv_timer_t &handle;
+        bool &unref;
+        bool &active;
     };
 };
 
 static v8::Handle<v8::Value> _timers_timer_wrap_Timer_Timer(const v8::Arguments &args) {
     _timers_timer_wrap_Timer_wrap::This This(args.This(), new _timers_timer_wrap_Timer_wrap);
-    #line 53 "src/modules/timers.gear"
-    This._active = false;
+    #line 37 "src/modules/timers.gear"
+    This.active = false;
+                assert(uv_timer_init(uv_default_loop(), &This.handle) == 0);
                 
-                int r = uv_timer_init(uv_default_loop(), &This._handle);
-                assert(r == 0);
-                
-                //FIXME Will This even work? It would never be dereferenced.
-                This._handle.data = new decltype(This)(This);
+                //FIXME Will This even work? It would never be cleaned up.
+                This.handle.data = new decltype(This)(This);
                 
                 // uv_timer_init adds a loop reference. (That is, it calls uv_ref.) This
                 // is not the behavior we want in Node. Timers should not increase the
@@ -79,22 +65,36 @@ static v8::Handle<v8::Value> _timers_timer_wrap_Timer_Timer(const v8::Arguments 
     return undefined;
 }
 
+static v8::Handle<v8::Value> _timers_timer_wrap_Timer_unref(const v8::Arguments &args) {
+    _timers_timer_wrap_Timer_wrap::This This(args.This());
+    #line 50 "src/modules/timers.gear"
+    Uv::Handle::unref(This);
+    return undefined;
+}
+
+static v8::Handle<v8::Value> _timers_timer_wrap_Timer_close(const v8::Arguments &args) {
+    _timers_timer_wrap_Timer_wrap::This This(args.This());
+    #line 52 "src/modules/timers.gear"
+    Uv::Handle::close(This);
+    return undefined;
+}
+
 static v8::Handle<v8::Value> _timers_timer_wrap_Timer_start(const v8::Arguments &args) {
     _timers_timer_wrap_Timer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 67 "src/modules/timers.gear"
+        #line 54 "src/modules/timers.gear"
         Value timeout(args[0]), repeat(args[1]);
         typedef decltype(This) Timer;
-                int r = uv_timer_start(&This._handle, [](uv_timer_t *handle, int status) {
+                int r = uv_timer_start(&This.handle, [](uv_timer_t *handle, int status) {
         Timer *timer = static_cast<Timer*>(handle->data);
-        stateChange(*timer);
+        Uv::Handle::stateChange(*timer);
         (*timer)["ontimeout"](status);
                 }, timeout, repeat);
                 
                 // Error starting the timer.
-                //if(r) SetErrno(uv_last_error(uv_default_loop())); // FIXME SetErrno
+                //if(r) SetErrno(uv_last_error(uv_default_loop())); //FIXME SetErrno
                 
-                stateChange(This);
+                Uv::Handle::stateChange(This);
                 return Integer(r);
         return undefined;
     }
@@ -103,24 +103,24 @@ static v8::Handle<v8::Value> _timers_timer_wrap_Timer_start(const v8::Arguments 
 
 static v8::Handle<v8::Value> _timers_timer_wrap_Timer_stop(const v8::Arguments &args) {
     _timers_timer_wrap_Timer_wrap::This This(args.This());
-    #line 82 "src/modules/timers.gear"
-    int r = uv_timer_stop(&This._handle);
+    #line 69 "src/modules/timers.gear"
+    int r = uv_timer_stop(&This.handle);
                 
-                //if(r) SetErrno(uv_last_error(uv_default_loop())); // FIXME SetErrno
+                //if(r) SetErrno(uv_last_error(uv_default_loop())); //FIXME SetErrno
                 
-                stateChange(This);
+                Uv::Handle::stateChange(This);
                 return Integer(r);
     return undefined;
 }
 
 static v8::Handle<v8::Value> _timers_timer_wrap_Timer_again(const v8::Arguments &args) {
     _timers_timer_wrap_Timer_wrap::This This(args.This());
-    #line 91 "src/modules/timers.gear"
-    int r = uv_timer_again(&This._handle);
+    #line 78 "src/modules/timers.gear"
+    int r = uv_timer_again(&This.handle);
                 
-                //if(r) SetErrno(uv_last_error(uv_default_loop())); // FIXME SetErrno
+                //if(r) SetErrno(uv_last_error(uv_default_loop())); //FIXME SetErrno
                 
-                stateChange(This);
+                Uv::Handle::stateChange(This);
                 return Integer(r);
     return undefined;
 }
@@ -128,9 +128,9 @@ static v8::Handle<v8::Value> _timers_timer_wrap_Timer_again(const v8::Arguments 
 static v8::Handle<v8::Value> _timers_timer_wrap_Timer_setRepeat(const v8::Arguments &args) {
     _timers_timer_wrap_Timer_wrap::This This(args.This());
     if(args.Length() >= 1) {
-        #line 99 "src/modules/timers.gear"
+        #line 86 "src/modules/timers.gear"
         Value repeat(args[0]);
-        uv_timer_set_repeat(&This._handle, repeat);
+        uv_timer_set_repeat(&This.handle, repeat);
                 return Integer(0);
         return undefined;
     }
@@ -139,8 +139,8 @@ static v8::Handle<v8::Value> _timers_timer_wrap_Timer_setRepeat(const v8::Argume
 
 static v8::Handle<v8::Value> _timers_timer_wrap_Timer_getRepeat(const v8::Arguments &args) {
     _timers_timer_wrap_Timer_wrap::This This(args.This());
-    #line 104 "src/modules/timers.gear"
-    int64_t repeat = uv_timer_get_repeat(&This._handle);
+    #line 91 "src/modules/timers.gear"
+    int64_t repeat = uv_timer_get_repeat(&This.handle);
                 
                 //if(repeat < 0) SetErrno(uv_last_error(uv_default_loop())); // FIXME SetErrno
                 
@@ -155,6 +155,8 @@ static void _setup_timers(Value exports, Value require, Value module) {
     v8::Handle<v8::FunctionTemplate> _timers_timer_wrap_Timer = v8::FunctionTemplate::New(_timers_timer_wrap_Timer_Timer);
     _timers_timer_wrap_Timer->SetClassName(String("Timer"));
     _timers_timer_wrap_Timer->InstanceTemplate()->SetInternalFieldCount(1);
+    _timers_timer_wrap_Timer->PrototypeTemplate()->Set("unref", Function(_timers_timer_wrap_Timer_unref, "unref"));
+    _timers_timer_wrap_Timer->PrototypeTemplate()->Set("close", Function(_timers_timer_wrap_Timer_close, "close"));
     _timers_timer_wrap_Timer->PrototypeTemplate()->Set("start", Function(_timers_timer_wrap_Timer_start, "start"));
     _timers_timer_wrap_Timer->PrototypeTemplate()->Set("stop", Function(_timers_timer_wrap_Timer_stop, "stop"));
     _timers_timer_wrap_Timer->PrototypeTemplate()->Set("again", Function(_timers_timer_wrap_Timer_again, "again"));

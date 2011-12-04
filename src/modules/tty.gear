@@ -23,16 +23,70 @@ license {
 }
 
 top {
-    #include <uv.h>
+    #include <assert.h>
+    #include <unistd.h>
+    #include <UvCommon.h>
 }
 
 module tty {
     object tty_wrap {
         class TTY {
+            native uv_tty_t handle;
+            native bool unref;
+            native size_t slabOffset;
+            
+            TTY(fd, readable) {
+                this.unref = false;
+                uv_tty_init(uv_default_loop(), &this.handle, fd, readable);
+                
+                //FIXME Will this even work? It would never be cleaned up.
+                this.handle.data = new decltype(this)(this);
+                Uv::Stream::updateWriteQueueSize(this);
+            }
+            
+            unref()
+                Uv::Handle::unref(this);
+            close()
+                Uv::Handle::close(this);
+            
+            shutdown() {
+                std::cerr << "TODO: TTY shutdown" << std::endl;
+            }
+            
+            readStart()
+                Uv::Stream::readStart(this);
+            readStop()
+                Uv::Stream::readStop(this);
+            
+            write(buffer, offset, length, sendStream)
+                return Uv::Stream::write(this, buffer, offset, length, sendStream);
+            write(buffer, offset, length)
+                return Uv::Stream::write(this, buffer, offset, length);
+            write(buffer, offset)
+                return Uv::Stream::write(this, buffer, offset);
+            write(buffer)
+                return Uv::Stream::write(this, buffer);
         }
         
-        isTTY(fd) {
+        isTTY(fd)
             return Value(uv_guess_handle(fd) == UV_TTY);
+        
+        guessHandleType(_fd) {
+            int fd = _fd;
+            assert(fd >= 0);
+            
+            uv_handle_type t = uv_guess_handle(fd);
+            
+            switch(t) {
+                case UV_TTY:
+                    return String("TTY");
+                case UV_NAMED_PIPE:
+                    return String("PIPE");
+                case UV_FILE:
+                    return String("FILE");
+                default:
+                    assert(0);
+            }
         }
     }
     
@@ -46,6 +100,7 @@ var net = require('net');
 //var isTTY = process.binding('tty_wrap').isTTY;
 var TTY = tty_wrap.TTY;
 var isTTY = tty_wrap.isTTY;
+exports.guessHandleType = tty_wrap.guessHandleType;
 //END *gearbox
 
 var stdinHandle;
