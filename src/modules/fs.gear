@@ -24,15 +24,16 @@ license {
 
 top {
     
-    #include <uv.h>
+    #include <cstring>
     #include <errno.h>
+    #include <UvCommon.h>
 
     #include "buffer.h"
     
     // hack alert! copy of ErrnoException in node.cc, tuned for uv errors
     Value FsError(int errorNo, String syscall, String msg, String path) {
         uv_err_t uvErr;
-        memset(&uvErr, 0, sizeof(uv_err_t));
+        std::memset(&uvErr, 0, sizeof(uv_err_t));
         uvErr.code = uv_err_code(errorNo);
         
         if(!msg.length())
@@ -40,7 +41,7 @@ top {
 
         String errCode = uv_strerror(uvErr), errString = errCode + ", " + msg;
 
-        var err = Error(path ? errString + " '" + path + "'" : errString);
+        var err = Error(path.length() ? errString + " '" + path + "'" : errString);
 
         // TODO errno should probably go
         err["errno"] = errorNo;
@@ -52,16 +53,80 @@ top {
         return err;
     }
     
+// Converts an unixtime to V8 Date
+#define NODE_UNIXTIME_V8(t) v8::Date::New(1000*double(t))
+#define NODE_V8_UNIXTIME(v) (double(v)/1000.0)
+
+// Use different stat structs & calls on windows and posix;
+// on windows, _stati64 is utf-8 and big file aware.
+#if __POSIX__
+# define NODE_STAT        stat
+# define NODE_FSTAT       fstat
+# define NODE_STAT_STRUCT struct stat
+#else // __MINGW32__
+# define NODE_STAT        _stati64
+# define NODE_FSTAT       _fstati64
+# define NODE_STAT_STRUCT struct _stati64
+#endif
+    
+    static var statsCtor;
+    
+    Value makeStats(NODE_STAT_STRUCT *s) {
+        var stats = statsCtor.newInstance();
+        
+        // ID of device containing file
+        stats["dev"] = s->st_dev;
+        
+        // inode number
+        stats["ino"] = s->st_ino;
+        
+        // protection
+        stats["mode"] = s->st_mode;
+        
+        // number of hard links
+        stats["nlink"] = s->st_nlink;
+        
+        // user ID of owner
+        stats["uid"] = s->st_uid;
+        
+        // group ID of owner
+        stats["gid"] = s->st_gid;
+        
+        // device ID (if special file)
+        stats["rdev"] = s->st_rdev;
+        
+        // total size, in bytes
+        stats["size"] = s->st_size;
+        
+#ifdef __POSIX__
+        // blocksize for filesystem I/O
+        stats["blksize"] = s->st_blksize;
+        
+        // number of blocks allocated
+        stats["blocks"] = s->st_blocks;
+#endif
+        
+        // time of last access
+        stats["atime"] = NODE_UNIXTIME_V8(s->st_atime);
+        
+        // time of last modification
+        stats["mtime"] = NODE_UNIXTIME_V8(s->st_mtime);
+        
+        // time of last status change
+        stats["ctime"] = NODE_UNIXTIME_V8(s->st_ctime);
+        
+        return stats;
+    }
+    
 #define FS_CALL(func, cb, path, ...)                                        \
     if(args[cb]->IsFunction())                                              \
         return undefined;                                                   \
     uv_fs_t req;                                                            \
     int result = uv_fs_##func(uv_default_loop(), &req, __VA_ARGS__, NULL);  \
-    if(result < 0) {                                                        \
-        int code = uv_last_error(uv_default_loop()).code;                   \
-        return Throw(FsError(code, #func, "", path));                         \
-    }
-    
+    if(result < 0)                                                          \
+        return Throw(FsError(uv_last_error(uv_default_loop()).code, #func, "", path));
+#define FS_CALL_RINT(...) FS_CALL(__VA_ARGS__);return Integer(result);
+#define FS_CALL_RSTAT(...) FS_CALL(__VA_ARGS__);return makeStats(reinterpret_cast<NODE_STAT_STRUCT*>(req.ptr));
 #define GET_OFFSET(a) ((a)->IsNumber() ? (a)->IntegerValue() : -1) //FIXME optArgs
 }
 
@@ -69,14 +134,11 @@ module fs {
     object binding {
         class Stats {}
         
-        close(fd) {
+        close(fd)
             FS_CALL(close, 0, "", fd);
-        }
         
-        open(path, flags, mode) {
-            FS_CALL(open, 3, path, path.to<String>(), flags, mode);
-            return Integer(result);
-        }
+        open(path, flags, mode)
+            FS_CALL_RINT(open, 3, path, path.to<String>(), flags, mode);
         
         read(fd, buffer, _offset, _length) {
             if(!buffer.is<Buffer>())
@@ -90,9 +152,7 @@ module fs {
             if(offset + length > bufferLength)
                 THROW_ERROR("Length extends beyond buffer");
             
-            off_t position = GET_OFFSET(args[4]);
-            FS_CALL(read, 5, "", fd, Buffer::data(buffer) + offset, length, position);
-            return Integer(result);
+            FS_CALL_RINT(read, 5, "", fd, Buffer::data(buffer) + offset, length, GET_OFFSET(args[4]));
         }
         
         write(fd, buffer, _offset, _length) {
@@ -107,15 +167,31 @@ module fs {
             if(offset + length > bufferLength)
                 THROW_ERROR("Length extends beyond buffer");
             
-            off_t position = GET_OFFSET(args[4]);
-            FS_CALL(write, 5, "", fd, Buffer::data(buffer) + offset, length, position);
-            return Integer(result);
+            FS_CALL_RINT(write, 5, "", fd, Buffer::data(buffer) + offset, length, GET_OFFSET(args[4]));
         }
+    
+        stat(path)
+            FS_CALL_RSTAT(stat, 1, path, path.to<String>());
+        lstat(path)
+            FS_CALL_RSTAT(lstat, 1, path, path.to<String>());
+        fstat(fd)
+            FS_CALL_RSTAT(fstat, 1, "", fd);
+    }
+    
+    postSetup {
+        statsCtor = binding["Stats"];
     }
     
     js {
 //BEGIN lib/fs.js
+// Maintainers, keep in mind that octal literals are not allowed
+// in strict mode. Use the decimal value and add a comment with
+// the octal value. Example:
+//
+//   var mode = 438; /* mode=0666 */
+
 var util = require('util');
+var pathModule = require('path');
 
 //BEGIN #gearbox
 //var binding = process.binding('fs');
@@ -209,7 +285,7 @@ fs.readFile = function(path, encoding_) {
 };
 
 fs.readFileSync = function(path, encoding) {
-  var fd = fs.openSync(path, constants.O_RDONLY, 0666);
+  var fd = fs.openSync(path, constants.O_RDONLY, 438 /*=0666*/);
   var buffer = new Buffer(4048);
   var buffers = [];
   var nread = 0;
@@ -311,14 +387,15 @@ fs.open = function(path, flags, mode, callback) {
     callback = noop;
   }
 
-  mode = modeNum(mode, '0666');
+  mode = modeNum(mode, 438 /*=0666*/);
 
-  binding.open(path, stringToFlags(flags), mode, callback);
+  binding.open(pathModule._makeLong(path), stringToFlags(flags), mode,
+    callback);
 };
 
 fs.openSync = function(path, flags, mode) {
-  mode = modeNum(mode, '0666');
-  return binding.open(path, stringToFlags(flags), mode);
+  mode = modeNum(mode, 438 /*=0666*/);
+  return binding.open(pathModule._makeLong(path), stringToFlags(flags), mode);
 };
 
 fs.read = function(fd, buffer, offset, length, position, callback) {
@@ -413,11 +490,13 @@ fs.writeSync = function(fd, buffer, offset, length, position) {
 };
 
 fs.rename = function(oldPath, newPath, callback) {
-  binding.rename(oldPath, newPath, callback || noop);
+  binding.rename(pathModule._makeLong(oldPath), pathModule._makeLong(newPath),
+    callback || noop);
 };
 
 fs.renameSync = function(oldPath, newPath) {
-  return binding.rename(oldPath, newPath);
+  return binding.rename(pathModule._makeLong(oldPath),
+    pathModule._makeLong(newPath));
 };
 
 fs.truncate = function(fd, len, callback) {
@@ -429,11 +508,11 @@ fs.truncateSync = function(fd, len) {
 };
 
 fs.rmdir = function(path, callback) {
-  binding.rmdir(path, callback || noop);
+  binding.rmdir(pathModule._makeLong(path), callback || noop);
 };
 
 fs.rmdirSync = function(path) {
-  return binding.rmdir(path);
+  return binding.rmdir(pathModule._makeLong(path));
 };
 
 fs.fdatasync = function(fd, callback) {
@@ -453,11 +532,14 @@ fs.fsyncSync = function(fd) {
 };
 
 fs.mkdir = function(path, mode, callback) {
-  binding.mkdir(path, modeNum(mode), callback || noop);
+  if (typeof mode === 'function') callback = mode;
+  binding.mkdir(pathModule._makeLong(path), modeNum(mode, 511 /*=0777*/),
+    callback || noop);
 };
 
 fs.mkdirSync = function(path, mode) {
-  return binding.mkdir(path, modeNum(mode));
+  return binding.mkdir(pathModule._makeLong(path),
+    modeNum(mode, 511 /*=0777*/));
 };
 
 fs.sendfile = function(outFd, inFd, inOffset, length, callback) {
@@ -469,11 +551,11 @@ fs.sendfileSync = function(outFd, inFd, inOffset, length) {
 };
 
 fs.readdir = function(path, callback) {
-  binding.readdir(path, callback || noop);
+  binding.readdir(pathModule._makeLong(path), callback || noop);
 };
 
 fs.readdirSync = function(path) {
-  return binding.readdir(path);
+  return binding.readdir(pathModule._makeLong(path));
 };
 
 fs.fstat = function(fd, callback) {
@@ -481,11 +563,11 @@ fs.fstat = function(fd, callback) {
 };
 
 fs.lstat = function(path, callback) {
-  binding.lstat(path, callback || noop);
+  binding.lstat(pathModule._makeLong(path), callback || noop);
 };
 
 fs.stat = function(path, callback) {
-  binding.stat(path, callback || noop);
+  binding.stat(pathModule._makeLong(path), callback || noop);
 };
 
 fs.fstatSync = function(fd) {
@@ -493,46 +575,50 @@ fs.fstatSync = function(fd) {
 };
 
 fs.lstatSync = function(path) {
-  return binding.lstat(path);
+  return binding.lstat(pathModule._makeLong(path));
 };
 
 fs.statSync = function(path) {
-  return binding.stat(path);
+  return binding.stat(pathModule._makeLong(path));
 };
 
 fs.readlink = function(path, callback) {
-  binding.readlink(path, callback || noop);
+  binding.readlink(pathModule._makeLong(path), callback || noop);
 };
 
 fs.readlinkSync = function(path) {
-  return binding.readlink(path);
+  return binding.readlink(pathModule._makeLong(path));
 };
 
 fs.symlink = function(destination, path, mode_, callback) {
   var mode = (typeof(mode_) == 'string' ? mode_ : null);
   var callback_ = arguments[arguments.length - 1];
   callback = (typeof(callback_) == 'function' ? callback_ : null);
-  binding.symlink(destination, path, mode, callback);
+  binding.symlink(pathModule._makeLong(destination),
+    pathModule._makeLong(path), mode, callback);
 };
 
 fs.symlinkSync = function(destination, path, mode) {
-  return binding.symlink(destination, path, mode);
+  return binding.symlink(pathModule._makeLong(destination),
+    pathModule._makeLong(path), mode);
 };
 
 fs.link = function(srcpath, dstpath, callback) {
-  binding.link(srcpath, dstpath, callback || noop);
+  binding.link(pathModule._makeLong(srcpath), pathModule._makeLong(dstpath),
+    callback || noop);
 };
 
 fs.linkSync = function(srcpath, dstpath) {
-  return binding.link(srcpath, dstpath);
+  return binding.link(pathModule._makeLong(srcpath),
+    pathModule._makeLong(dstpath));
 };
 
 fs.unlink = function(path, callback) {
-  binding.unlink(path, callback || noop);
+  binding.unlink(pathModule._makeLong(path), callback || noop);
 };
 
 fs.unlinkSync = function(path) {
-  return binding.unlink(path);
+  return binding.unlink(pathModule._makeLong(path));
 };
 
 fs.fchmod = function(fd, mode, callback) {
@@ -551,23 +637,44 @@ if (constants.hasOwnProperty('O_SYMLINK')) {
         callback(err);
         return;
       }
-      fs.fchmod(fd, mode, callback);
+      // prefer to return the chmod error, if one occurs,
+      // but still try to close, and report closing errors if they occur.
+      fs.fchmod(fd, mode, function(err) {
+        fs.close(fd, function(err2) {
+          callback(err || err2);
+        });
+      });
     });
   };
 
   fs.lchmodSync = function(path, mode) {
     var fd = fs.openSync(path, constants.O_WRONLY | constants.O_SYMLINK);
-    return fs.fchmodSync(fd, mode);
+
+    // prefer to return the chmod error, if one occurs,
+    // but still try to close, and report closing errors if they occur.
+    var err, err2;
+    try {
+      var ret = fs.fchmodSync(fd, mode);
+    } catch (er) {
+      err = er;
+    }
+    try {
+      fs.closeSync(fd);
+    } catch (er) {
+      err2 = er;
+    }
+    if (err || err2) throw (err || err2);
+    return ret;
   };
 }
 
 
 fs.chmod = function(path, mode, callback) {
-  binding.chmod(path, modeNum(mode), callback || noop);
+  binding.chmod(pathModule._makeLong(path), modeNum(mode), callback || noop);
 };
 
 fs.chmodSync = function(path, mode) {
-  return binding.chmod(path, modeNum(mode));
+  return binding.chmod(pathModule._makeLong(path), modeNum(mode));
 };
 
 if (constants.hasOwnProperty('O_SYMLINK')) {
@@ -597,11 +704,11 @@ fs.fchownSync = function(fd, uid, gid) {
 };
 
 fs.chown = function(path, uid, gid, callback) {
-  binding.chown(path, uid, gid, callback || noop);
+  binding.chown(pathModule._makeLong(path), uid, gid, callback || noop);
 };
 
 fs.chownSync = function(path, uid, gid) {
-  return binding.chown(path, uid, gid);
+  return binding.chown(pathModule._makeLong(path), uid, gid);
 };
 
 // converts Date or number to a fractional UNIX timestamp
@@ -622,13 +729,13 @@ fs._toUnixTimestamp = toUnixTimestamp;
 fs.utimes = function(path, atime, mtime, callback) {
   atime = toUnixTimestamp(atime);
   mtime = toUnixTimestamp(mtime);
-  binding.utimes(path, atime, mtime, callback || noop);
+  binding.utimes(pathModule._makeLong(path), atime, mtime, callback || noop);
 };
 
 fs.utimesSync = function(path, atime, mtime) {
   atime = toUnixTimestamp(atime);
   mtime = toUnixTimestamp(mtime);
-  binding.utimes(path, atime, mtime);
+  binding.utimes(pathModule._makeLong(path), atime, mtime);
 };
 
 fs.futimes = function(fd, atime, mtime, callback) {
@@ -664,7 +771,7 @@ fs.writeFile = function(path, data, encoding_, callback) {
   var encoding = (typeof(encoding_) == 'string' ? encoding_ : 'utf8');
   var callback_ = arguments[arguments.length - 1];
   callback = (typeof(callback_) == 'function' ? callback_ : null);
-  fs.open(path, 'w', 0666, function(openErr, fd) {
+  fs.open(path, 'w', 438 /*=0666*/, function(openErr, fd) {
     if (openErr) {
       if (callback) callback(openErr);
     } else {
@@ -717,7 +824,7 @@ function FSWatcher() {
 util.inherits(FSWatcher, EventEmitter);
 
 FSWatcher.prototype.start = function(filename, persistent) {
-  var r = this._handle.start(filename, persistent);
+  var r = this._handle.start(pathModule._makeLong(filename), persistent);
 
   if (r) {
     this._handle.close();
@@ -774,7 +881,7 @@ util.inherits(StatWatcher, EventEmitter);
 
 
 StatWatcher.prototype.start = function(filename, persistent, interval) {
-  this._handle.start(filename, persistent, interval);
+  this._handle.start(pathModule._makeLong(filename), persistent, interval);
 };
 
 
@@ -837,8 +944,7 @@ fs.unwatchFile = function(filename) {
 // Not using realpath(2) because it's bad.
 // See: http://insanecoding.blogspot.com/2007/11/pathmax-simply-isnt.html
 
-var path = require('path'),
-    normalize = path.normalize,
+var normalize = pathModule.normalize,
     isWindows = process.platform === 'win32';
 
 if (isWindows) {
@@ -847,7 +953,7 @@ if (isWindows) {
 
   // windows version
   fs.realpathSync = function realpathSync(p, cache) {
-    p = path.resolve(p);
+    p = pathModule.resolve(p);
     if (cache && Object.prototype.hasOwnProperty.call(cache, p)) {
       return cache[p];
     }
@@ -862,12 +968,12 @@ if (isWindows) {
       cb = cache;
       cache = null;
     }
-    p = path.resolve(p);
+    p = pathModule.resolve(p);
     if (cache && Object.prototype.hasOwnProperty.call(cache, p)) {
       return cb(null, cache[p]);
     }
     fs.stat(p, function(err) {
-      if (err) cb(err);
+      if (err) return cb(err);
       if (cache) cache[p] = p;
       cb(null, p);
     });
@@ -883,7 +989,7 @@ if (isWindows) {
   // posix version
   fs.realpathSync = function realpathSync(p, cache) {
     // make p is absolute
-    p = path.resolve(p);
+    p = pathModule.resolve(p);
 
     if (cache && Object.prototype.hasOwnProperty.call(cache, p)) {
       return cache[p];
@@ -936,14 +1042,14 @@ if (isWindows) {
         if (!seenLinks[id]) {
           fs.statSync(base);
           seenLinks[id] = fs.readlinkSync(base);
-          resolvedLink = path.resolve(previous, seenLinks[id]);
+          resolvedLink = pathModule.resolve(previous, seenLinks[id]);
           // track this, if given a cache.
           if (cache) cache[base] = resolvedLink;
         }
       }
 
       // resolve the link, then start over
-      p = path.resolve(resolvedLink, p.slice(pos));
+      p = pathModule.resolve(resolvedLink, p.slice(pos));
       pos = 0;
       previous = base = current = '';
     }
@@ -962,7 +1068,7 @@ if (isWindows) {
     }
 
     // make p is absolute
-    p = path.resolve(p);
+    p = pathModule.resolve(p);
 
     if (cache && Object.prototype.hasOwnProperty.call(cache, p)) {
       return cb(null, cache[p]);
@@ -1040,7 +1146,7 @@ if (isWindows) {
     function gotTarget(err, target, base) {
       if (err) return cb(err);
 
-      var resolvedLink = path.resolve(previous, target);
+      var resolvedLink = pathModule.resolve(previous, target);
       if (cache) cache[base] = resolvedLink;
       gotResolvedLink(resolvedLink);
     }
@@ -1048,7 +1154,7 @@ if (isWindows) {
     function gotResolvedLink(resolvedLink) {
 
       // resolve the link, then start over
-      p = path.resolve(resolvedLink, p.slice(pos));
+      p = pathModule.resolve(resolvedLink, p.slice(pos));
       pos = 0;
       previous = base = current = '';
 
@@ -1085,7 +1191,7 @@ var ReadStream = fs.ReadStream = function(path, options) {
   this.paused = false;
 
   this.flags = 'r';
-  this.mode = parseInt('0666', 8);
+  this.mode = 438; /*=0666*/
   this.bufferSize = 64 * 1024;
 
   options = options || {};
@@ -1274,7 +1380,7 @@ var WriteStream = fs.WriteStream = function(path, options) {
 
   this.flags = 'w';
   this.encoding = 'binary';
-  this.mode = parseInt('0666', 8);
+  this.mode = 438; /*=0666*/
   this.bytesWritten = 0;
 
   options = options || {};
@@ -1435,6 +1541,68 @@ WriteStream.prototype.destroy = function(cb) {
 
 // There is no shutdown() for files.
 WriteStream.prototype.destroySoon = WriteStream.prototype.end;
+
+
+// SyncWriteStream is internal. DO NOT USE.
+// Temporary hack for process.stdout and process.stderr when piped to files.
+function SyncWriteStream(fd) {
+  this.fd = fd;
+  this.writable = true;
+  this.readable = false;
+};
+util.inherits(SyncWriteStream, Stream);
+
+
+// Export
+fs.SyncWriteStream = SyncWriteStream;
+
+
+SyncWriteStream.prototype.write = function(data, arg1, arg2) {
+  var encoding, cb;
+
+  // parse arguments
+  if (arg1) {
+    if (typeof arg1 === 'string') {
+      encoding = arg1;
+      cb = arg2;
+    } else if (typeof arg1 === 'function') {
+      cb = arg1;
+    } else {
+      throw new Error("bad arg");
+    }
+  }
+
+  // Change strings to buffers. SLOW
+  if (typeof data == 'string') {
+    data = new Buffer(data, encoding);
+  }
+
+  fs.writeSync(this.fd, data, 0, data.length);
+
+  if (cb) {
+    process.nextTick(cb);
+  }
+
+  return true;
+};
+
+
+SyncWriteStream.prototype.end = function(data, arg1, arg2) {
+  if (data) {
+    this.write(data, arg1, arg2);
+  }
+  this.destroy();
+};
+
+
+SyncWriteStream.prototype.destroy = function() {
+  fs.closeSync(this.fd);
+  this.fd = null;
+  this.emit('close');
+  return true;
+};
+
+SyncWriteStream.prototype.destroySoon = SyncWriteStream.prototype.destroy;
 //END lib/fs.js
     }
 }
