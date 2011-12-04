@@ -31,8 +31,10 @@
         'src/Context.cc',
         'src/NativeModule.cc',
         'src/TryCatch.cc',
+        'src/UvCommon.cc',
         
         # Modules
+        'src/modules/_debugger.cc',
         'src/modules/_linklist.cc',
         'src/modules/assert.cc',
         'src/modules/buffer.cc',
@@ -48,6 +50,7 @@
         'src/modules/readline.cc',
         'src/modules/repl.cc',
         'src/modules/stream.cc',
+        'src/modules/string_decoder.cc',
         'src/modules/sys.cc',
         'src/modules/timers.cc',
         'src/modules/tty.cc',
