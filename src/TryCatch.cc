@@ -79,5 +79,8 @@ namespace Gearbox {
                 m_LocalMessage.Clear();
             }
         #endif
+        
+        //HACK just so we know we got an error
+        _exit(1);
     }
 }
