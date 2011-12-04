@@ -34,7 +34,6 @@ namespace Gearbox {
 
 #include "String.h"
 #include "Value.h"
-
 #include "TryCatch.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))

@@ -163,26 +163,67 @@ namespace Gearbox {
     class Value {
         public:
             /** Default constructor */
-            Value() {}
+            Value() : m_bIsPersistent(true) {}
             /** Constructors */
             template <class T>
-            Value(T that) {
+            Value(const T &that) : m_bIsPersistent(true) {
                 from(that);
             }
+            template <class T>
+            Value(const T &&that) : m_bIsPersistent(true) {
+                from(that);
+            }
+            Value(Value &&that) : m_bIsPersistent(that.m_bIsPersistent) {
+                if(that.m_hValue.IsEmpty())
+                    from(that.m_pValue);
+                else {
+                    m_hValue = that.m_hValue;
+                    that.m_hValue.Clear();
+                }
+            }
+            
+            //HACK These are here until we have some sort of ConstValue or Arguments class.
+            // The reason is that we shouldn't call Persistent::New or attempt to turn the
+            // v8 Value into a Primitive, because it's not stored anywhere.
+            Value(const v8::Local<v8::Value> &that) : m_bIsPersistent(false), m_hValue(that) {}
+            Value(const v8::Local<v8::Value> &&that) : m_bIsPersistent(false), m_hValue(that) {}
+            
             /** Default destructor */
             virtual ~Value() {
-                if(!m_hValue.IsEmpty())
-                    m_hValue.MakeWeak(0, weakCallback);
+                if(m_bIsPersistent && !m_hValue.IsEmpty())
+                    v8::Persistent<v8::Value>(m_hValue).MakeWeak(0, weakCallback);
             }
             
             /** Copy operators */
             template <class T>
-            Value &operator=(T that) {
-                if(!m_hValue.IsEmpty()) {
-                    m_hValue.MakeWeak(0, weakCallback);
+            Value &operator=(const T &that) {
+                if(m_bIsPersistent && !m_hValue.IsEmpty()) {
+                    v8::Persistent<v8::Value>(m_hValue).MakeWeak(0, weakCallback);
                     m_hValue.Clear();
                 }
                 from(that);
+                return *this;
+            }
+            template <class T>
+            Value &operator=(const T &&that) {
+                if(m_bIsPersistent && !m_hValue.IsEmpty()) {
+                    v8::Persistent<v8::Value>(m_hValue).MakeWeak(0, weakCallback);
+                    m_hValue.Clear();
+                }
+                from(that);
+                return *this;
+            }
+            Value &operator=(Value &&that) {
+                if(m_bIsPersistent && !m_hValue.IsEmpty()) {
+                    v8::Persistent<v8::Value>(m_hValue).MakeWeak(0, weakCallback);
+                    m_hValue.Clear();
+                }
+                if(that.m_hValue.IsEmpty())
+                    from(that.m_pValue);
+                else {
+                    m_hValue = that.m_hValue;
+                    that.m_hValue.Clear();
+                }
                 return *this;
             }
             
@@ -511,11 +552,10 @@ namespace Gearbox {
                 that.Dispose();
             }
             
+            const bool m_bIsPersistent;
+            v8::Handle<v8::Value> m_hValue;
             Primitive m_pValue;
-            v8::Persistent<v8::Value> m_hValue;
-            
-            friend class Assignable<Value, uint32_t>;
-            friend class Assignable<Value, String>;
+            //v8::Persistent<v8::Value> m_hValue;
     };
 }
 
