@@ -25,8 +25,49 @@ license {
 top {
     #include <limits.h>
     #include <unistd.h>
+    #include <string.h>
+    #include <UvCommon.h>
+
+    static Value g_Process;
     
     static char pathBuffer[PATH_MAX + 1];
+
+    static uv_check_t check_tick_watcher;
+    static uv_prepare_t prepare_tick_watcher;
+    static uv_idle_t tick_spinner;
+    static bool need_tick_cb;
+
+    static void tick() {
+        // Avoid entering a V8 scope.
+        if(!need_tick_cb)
+            return;
+        
+        need_tick_cb = false;
+        if(uv_is_active(reinterpret_cast<uv_handle_t*>(&tick_spinner))) {
+            uv_idle_stop(&tick_spinner);
+            uv_unref(uv_default_loop());
+        }
+        // HACK Maybe we can do this better.
+        g_Process["_tickCallback"]();
+        /*Local<Value> cb_v = process->Get(tick_callback_sym);
+        if (!cb_v->IsFunction()) return;
+        Local<Function> cb = Local<Function>::Cast(cb_v);
+        
+        TryCatch try_catch;
+        
+        cb->Call(process, 0, NULL);
+        
+        if (try_catch.HasCaught()) {
+            FatalException(try_catch);
+        }*/
+    }
+
+
+    static void spin(uv_idle_t *handle, int status) {
+        assert(reinterpret_cast<uv_idle_t*>(handle) == &tick_spinner);
+        assert(status == 0);
+        tick();
+    }
     
     static void init(Value argv);
     
@@ -46,32 +87,17 @@ top {
         for(int i = 0; i < argc; i++)
             arguments[i] = argv[i];
         
+        uv_idle_init(uv_default_loop(), &tick_spinner);
+        uv_unref(uv_default_loop());
+        
         init(arguments);
-        /*
-        for(int i = 1; i < argc; i++) {
-            String arg = argv[i];
-            
-            // Ignore unknown flags
-            if(!arg.compare("-", 2)) {
-                
-                // Read the file
-                String source = NativeModule::require("fs")["readFileSync"](arg);
-                
-                // Report exceptions caught while reading the file
-                if(tryCatch.hasCaught())
-                    return 1;
-                
-                // Set the rest of the arguments into the arguments array
-                for(int j = i; j < argc; j++)
-                    arguments[j - i] = argv[j];
-                
-                // Run the script
-                context.runScript(source, arg);
-                
-                // Stop if there are exceptions
-                return tryCatch.hasCaught();
-            }
-        }*/
+        
+        // All our arguments are loaded. We've evaluated all of the scripts. We
+        // might even have created TCP servers. Now we enter the main eventloop. If
+        // there are no watchers on the loop (except for the ones that were
+        // uv_unref'd) then this function exits. As long as there are active
+        // watchers, it blocks.
+        uv_run(uv_default_loop());
     }
 }
 
@@ -79,6 +105,19 @@ native init(argv) {
     object process {
         binding() {
             THROW_ERROR("process.binding is deprecated in gearbox-node");
+        }
+
+        _needTickCallback() {
+            need_tick_cb = true;
+            // TODO: this tick_spinner shouldn't be necessary. An ev_prepare should be
+            // sufficent, the problem is only in the case of the very last "tick" -
+            // there is nothing left to do in the event loop and libev will exit. The
+            // ev_prepare callback isn't called before exiting. Thus we start this
+            // tick_spinner to keep the event loop alive long enough to handle it.
+            if(!uv_is_active(reinterpret_cast<uv_handle_t*>(&tick_spinner))) {
+                uv_idle_start(&tick_spinner, spin);
+                uv_ref(uv_default_loop());
+            }
         }
         
         cwd() {
@@ -100,6 +139,10 @@ native init(argv) {
         require(id, _require) {
             return NativeModule::require(id, _require);
         }
+    }
+
+    postSetup {
+        g_Process = process;
     }
     
     js {
@@ -172,7 +215,7 @@ function startup() {
     // channel.
     if (process.env.NODE_WORKER_ID) {
       var cluster = NativeModule.require('cluster');
-      cluster.startWorker();
+      cluster._startWorker();
     }
 
     var Module = NativeModule.require('module');
@@ -247,7 +290,10 @@ startup._lazyConstants = null;
 
 startup.lazyConstants = function() {
   if (!startup._lazyConstants) {
-    startup._lazyConstants = process.binding('constants');
+//BEGIN *gearbox
+    //startup._lazyConstants = process.binding('constants');
+    startup._lazyConstants = require('constants');
+//END *gearbox
   }
   return startup._lazyConstants;
 };
@@ -292,15 +338,30 @@ startup.processNextTick = function() {
   };
 };
 
+function errnoException(errorno, syscall) {
+  // TODO make this more compatible with ErrnoException from src/node.cc
+  // Once all of Node is using this function the ErrnoException from
+  // src/node.cc should be removed.
+  var e = new Error(syscall + ' ' + errorno);
+  e.errno = e.code = errorno;
+  e.syscall = syscall;
+  return e;
+}
+
 function createWritableStdioStream(fd) {
   var stream;
-  var tty_wrap = process.binding('tty_wrap');
+//BEGIN *gearbox
+  //var tty_wrap = process.binding('tty_wrap');
+  var tty = NativeModule.require('tty'), tty_wrap = tty;
+//END *gearbox
 
   // Note stream._type is used for test-module-load-list.js
 
   switch (tty_wrap.guessHandleType(fd)) {
     case 'TTY':
-      var tty = NativeModule.require('tty');
+//BEGIN *gearbox
+      //var tty = NativeModule.require('tty');
+//END *gearbox
       stream = new tty.WriteStream(fd);
       stream._type = 'tty';
 
@@ -313,7 +374,7 @@ function createWritableStdioStream(fd) {
 
     case 'FILE':
       var fs = NativeModule.require('fs');
-      stream = new fs.WriteStream(null, { fd: fd });
+      stream = new fs.SyncWriteStream(fd);
       stream._type = 'fs';
       break;
 
@@ -343,6 +404,8 @@ function createWritableStdioStream(fd) {
   // For supporting legacy API we put the FD here.
   stream.fd = fd;
 
+  stream._isStdio = true;
+
   return stream;
 }
 
@@ -352,24 +415,35 @@ startup.processStdio = function() {
   process.__defineGetter__('stdout', function() {
     if (stdout) return stdout;
     stdout = createWritableStdioStream(1);
+    stdout.end = stdout.destroy = stdout.destroySoon = function() {
+      throw new Error('process.stdout cannot be closed');
+    };
     return stdout;
   });
 
   process.__defineGetter__('stderr', function() {
     if (stderr) return stderr;
     stderr = createWritableStdioStream(2);
+    stderr.end = stderr.destroy = stderr.destroySoon = function() {
+      throw new Error('process.stderr cannot be closed');
+    };
     return stderr;
   });
 
   process.__defineGetter__('stdin', function() {
     if (stdin) return stdin;
 
-    var tty_wrap = process.binding('tty_wrap');
+//BEGIN *gearbox
+    //var tty_wrap = process.binding('tty_wrap');
+    var tty = NativeModule.require('tty'), tty_wrap = tty;
+//END *gearbox
     var fd = 0;
 
     switch (tty_wrap.guessHandleType(fd)) {
       case 'TTY':
-        var tty = NativeModule.require('tty');
+//BEGIN *gearbox
+        //var tty = NativeModule.require('tty');
+//END *gearbox
         stdin = new tty.ReadStream(fd);
         break;
 
@@ -402,34 +476,30 @@ startup.processStdio = function() {
 };
 
 startup.processKillAndExit = function() {
-  var isWindows = process.platform === 'win32';
-
   process.exit = function(code) {
     process.emit('exit', code || 0);
     process.reallyExit(code || 0);
   };
 
-  if (isWindows) {
-    process.kill = function(pid, sig) {
-      console.warn('process.kill() is not supported on Windows.  Use ' +
-                   'child.kill() to kill a process that was started '  +
-                   'with child_process.spawn().');
-    }
-  } else {
-    process.kill = function(pid, sig) {
-      // preserve null signal
-      if (0 === sig) {
-        process._kill(pid, 0);
+  process.kill = function(pid, sig) {
+    var r;
+    
+    // preserve null signal
+    if (0 === sig) {
+      r = process._kill(pid, 0);
+    } else {
+      sig = sig || 'SIGTERM';
+      if (startup.lazyConstants()[sig]) {
+        r = process._kill(pid, startup.lazyConstants()[sig]);
       } else {
-        sig = sig || 'SIGTERM';
-        if (startup.lazyConstants()[sig]) {
-          process._kill(pid, startup.lazyConstants()[sig]);
-        } else {
-          throw new Error('Unknown signal: ' + sig);
-        }
+        throw new Error('Unknown signal: ' + sig);
       }
-    };
-  }
+    }
+
+    if (r) {
+      throw errnoException(errno, 'kill');
+    }
+  };
 };
 
 startup.processSignalHandlers = function() {
