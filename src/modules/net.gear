@@ -36,13 +36,19 @@ function noop() {};
 
 // constructor for lazy loading
 function createPipe() {
-  var Pipe = process.binding('pipe_wrap').Pipe;
+//BEGIN *gearbox
+  //var Pipe = process.binding('pipe_wrap').Pipe;
+  var Pipe = require('pipe').Pipe;
+//END *gearbox
   return new Pipe();
 }
 
 // constructor for lazy loading
 function createTCP() {
-  var TCP = process.binding('tcp_wrap').TCP;
+//BEGIN *gearbox
+  //var TCP = process.binding('tcp_wrap').TCP;
+  var TCP = tcp_wrap.TCP;
+//END *gearbox
   return new TCP();
 }
 
