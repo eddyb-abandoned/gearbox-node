@@ -27,50 +27,64 @@ header {
         enum encoding {ASCII, UTF8, BASE64, UCS2, BINARY, HEX};
         
         class Buffer : public Value {
-            public:
-                static bool is(const Value &that) {
-                    if(!that.is<Object>())
-                        return false;
-                    return that.to<v8::Handle<v8::Object>>()->GetIndexedPropertiesExternalArrayDataType() == v8::kExternalUnsignedByteArray;
-                }
-                
-                static uint8_t *data(const Value &that) {
-                    return static_cast<uint8_t*>(that.to<v8::Handle<v8::Object>>()->GetIndexedPropertiesExternalArrayData());
-                }
-                
-                static size_t length(const Value &that) {
-                    return that.to<v8::Handle<v8::Object>>()->GetIndexedPropertiesExternalArrayDataLength();
-                }
+        public:
+            Buffer(size_t size) : Value(getCtor().newInstance(size)) {}
+            static bool is(const Value &that) {
+                if(!that.is<Object>())
+                    return false;
+                return that.to<v8::Handle<v8::Object>>()->GetIndexedPropertiesExternalArrayDataType() == v8::kExternalUnsignedByteArray;
+            }
+            
+            static uint8_t *data(const Value &that) {
+                return static_cast<uint8_t*>(that.to<v8::Handle<v8::Object>>()->GetIndexedPropertiesExternalArrayData());
+            }
+            
+            static size_t length(const Value &that) {
+                return that.to<v8::Handle<v8::Object>>()->GetIndexedPropertiesExternalArrayDataLength();
+            }
+            
+        private:
+            Value &getCtor() {
+                if(m_BufferCtor == undefined)
+                    m_BufferCtor = Context::getCurrent()->global()["Buffer"];
+                return m_BufferCtor;
+            }
+            
+            static Value m_BufferCtor;
         };
     }
 }
 
 top {
     #include <assert.h>
+    #include <cstring>
+    
+    Value Buffer::m_BufferCtor;
     
     typedef void (*freeCallback)(uint8_t *data, void *hint);
     
     enum encoding parseEncoding(String encodingString, enum encoding _default) {
         if(!encodingString.length())
             return _default;
+        encodingString = encodingString.toLower();
         
-        if(encodingString.caseCompare("utf8") || encodingString.caseCompare("utf-8"))
+        if(encodingString == "utf8" || encodingString == "utf-8")
             return UTF8;
-        else if(encodingString.caseCompare("ascii"))
+        else if(encodingString == "ascii")
             return ASCII;
-        else if(encodingString.caseCompare("base64"))
+        else if(encodingString == "base64")
             return BASE64;
-        else if(encodingString.caseCompare("ucs2") || encodingString.caseCompare("ucs-2"))
+        else if(encodingString == "ucs2" || encodingString == "ucs-2")
             return UCS2;
-        else if(encodingString.caseCompare("binary"))
+        else if(encodingString == "binary")
             return BINARY;
-        else if(encodingString.caseCompare("hex"))
+        else if(encodingString == "hex")
             return HEX;
-        else if(encodingString.caseCompare("raw")) {
-            std::cerr << "'raw' (array of integers) has been removed. Use 'binary'.\n";
+        else if(encodingString == "raw") {
+            std::cerr << "'raw' (array of integers) has been removed. Use 'binary'." << std::endl;
             return BINARY;
-        } else if(encodingString.caseCompare("raws")) {
-            std::cerr << "'raws' encoding has been renamed to 'binary'. Please update your code.\n";
+        } else if(encodingString == "raws") {
+            std::cerr << "'raws' encoding has been renamed to 'binary'. Please update your code." << std::endl;
             return BINARY;
         }
         return _default;
@@ -145,9 +159,7 @@ top {
     }
     
     static size_t base64DecodedSize(const String &str) {
-        size_t size = str.length();
-        const char *const end = *str + size;
-        const size_t remainder = size % 4;
+        size_t size = str.length(), remainder = size % 4;
         
         size = (size / 4) * 3;
         if(remainder) {
@@ -161,9 +173,9 @@ top {
         
         // Check for trailing padding (1 or 2 bytes)
         if(size > 0) {
-            if(end[-1] == '=')
+            if(str[str.length()-1] == '=')
                 size--;
-            if(str[-2] == '=')
+            if(str[str.length()-2] == '=')
                 size--;
         }
         
@@ -208,7 +220,7 @@ module buffer {
     object binding {
         class SlowBuffer {
             native size_t nLength = 0;
-            native uint8_t *pData = NULL;
+            native uint8_t *data = NULL;
             native freeCallback pCallback = NULL;
             native void *pCallbackHint = NULL;
             
@@ -217,26 +229,26 @@ module buffer {
             SlowBuffer(length) {
                 this.nLength = length;
                 if(this.nLength) {
-                    this.pData = new uint8_t [this.nLength];
+                    this.data = new uint8_t [this.nLength];
                     v8::V8::AdjustAmountOfExternalAllocatedMemory(length);
                 } else
-                    this.pData = 0;
+                    this.data = 0;
                 
-                this.to<v8::Handle<v8::Object>>()->SetIndexedPropertiesToExternalArrayData(this.pData, v8::kExternalUnsignedByteArray, this.nLength);
+                this.to<v8::Handle<v8::Object>>()->SetIndexedPropertiesToExternalArrayData(this.data, v8::kExternalUnsignedByteArray, this.nLength);
                 this["length"] = this.nLength;
             }
             
             binarySlice(_start, _end) {SLICE_ARGS
-                return encodeString(this.pData + start, end - start, BINARY);
-            }	
+                return encodeString(this.data + start, end - start, BINARY);
+            }
             asciiSlice(_start, _end) {SLICE_ARGS
-                return String(this.pData + start, end - start);
+                return String(this.data + start, end - start);
             }
             utf8Slice(_start, _end) {SLICE_ARGS
-                return String(this.pData + start, end - start);
+                return String(this.data + start, end - start);
             }
             ucs2Slice(_start, _end) {SLICE_ARGS
-                return v8::String::New(reinterpret_cast<uint16_t*>(this.pData + start), (end - start) / 2);
+                return v8::String::New(reinterpret_cast<uint16_t*>(this.data + start), (end - start) / 2);
             }
             base64Slice(_start, _end) {SLICE_ARGS
                 int n = end - start;
@@ -250,10 +262,10 @@ module buffer {
                 bool b1_oob, b2_oob;
                 
                 while (i < end) {
-                    bitbuf[0] = this.pData[i++];
+                    bitbuf[0] = this.data[i++];
                     
                     if (i < end) {
-                        bitbuf[1] = this.pData[i];
+                        bitbuf[1] = this.data[i];
                         b1_oob = false;
                     }  else {
                         bitbuf[1] = 0;
@@ -262,7 +274,7 @@ module buffer {
                     i++;
                     
                     if (i < end) {
-                        bitbuf[2] = this.pData[i];
+                        bitbuf[2] = this.data[i];
                         b2_oob = false;
                     }  else {
                         bitbuf[2] = 0;
@@ -305,7 +317,7 @@ module buffer {
             }
 
             fill(value, _start, _end) {SLICE_ARGS
-                memset(this.pData + start, value.to<uint8_t>(), end - start);
+                std::fill(this.data + start, this.data + end, value.to<uint8_t>());
             }
             
             copy(target, _targetStart, _sourceStart) {
@@ -337,7 +349,7 @@ module buffer {
                                  MIN(targetLength - targetStart, this.nLength - sourceStart));
                 
                 // Need to use slightly slower memmove if the ranges might overlap
-                memmove(targetData + targetStart, this.pData + sourceStart, toCopy);
+                std::memmove(targetData + targetStart, this.data + sourceStart, toCopy);
                 
                 return Integer(toCopy);
             }
@@ -350,7 +362,7 @@ module buffer {
                 
                 size_t maxLength = args[2]->IsUndefined() ? this.nLength - offset : args[2]->Uint32Value(); //FIXME optArgs
                 maxLength = MIN(length, MIN(this.nLength - offset, maxLength));
-                return Integer(decodeWrite(this.pData + offset, maxLength, string, BINARY));
+                return Integer(decodeWrite(this.data + offset, maxLength, string, BINARY));
             }
             asciiWrite(string, _offset) {
                 v8::Handle<v8::String> s = string;
@@ -361,7 +373,7 @@ module buffer {
                 
                 size_t maxLength = args[2]->IsUndefined() ? this.nLength - offset : args[2]->Uint32Value(); //FIXME optArgs
                 maxLength = MIN(length, MIN(this.nLength - offset, maxLength));
-                return Integer(s->WriteAscii(reinterpret_cast<char*>(this.pData + offset), 0, maxLength,
+                return Integer(s->WriteAscii(reinterpret_cast<char*>(this.data + offset), 0, maxLength,
                                             (v8::String::HINT_MANY_WRITES_EXPECTED | v8::String::NO_NULL_TERMINATION)));
             }
             utf8Write(string, _offset) {
@@ -378,7 +390,7 @@ module buffer {
                 
                 size_t maxLength = args[2]->IsUndefined() ? this.nLength - offset : args[2]->Uint32Value(); //FIXME optArgs
                 maxLength = MIN(this.nLength - offset, maxLength);
-                return Integer(s->WriteUtf8(reinterpret_cast<char*>(this.pData + offset), maxLength, NULL,
+                return Integer(s->WriteUtf8(reinterpret_cast<char*>(this.data + offset), maxLength, NULL,
                                             (v8::String::HINT_MANY_WRITES_EXPECTED | v8::String::NO_NULL_TERMINATION)));
             }
             ucs2Write(string, _offset) {
@@ -391,10 +403,10 @@ module buffer {
                 size_t maxLength = args[2]->IsUndefined() ? this.nLength - offset : args[2]->Uint32Value(); //FIXME optArgs
                 maxLength = MIN(this.nLength - offset, maxLength) / 2;
                 
-                char *p = reinterpret_cast<char*>(this.pData + offset);
+                char *p = reinterpret_cast<char*>(this.data + offset);
                 
                 int charsWritten;
-                return Integer(s->Write(reinterpret_cast<uint16_t*>(this.pData + offset), 0, maxLength,
+                return Integer(s->Write(reinterpret_cast<uint16_t*>(this.data + offset), 0, maxLength,
                                             (v8::String::HINT_MANY_WRITES_EXPECTED | v8::String::NO_NULL_TERMINATION)));
             }
             base64Write(_string, _offset) {
@@ -422,9 +434,9 @@ module buffer {
                     THROW_TYPE_ERROR("Buffer too small");
                 
                 char a, b, c, d;
-                char *start = reinterpret_cast<char*>(this.pData + offset);
+                char *start = reinterpret_cast<char*>(this.data + offset);
                 char *dst = start;
-                const char *src = *string;
+                const char *src = string;
                 const char *const srcEnd = src + string.length();
                 
                 while(src < srcEnd) {

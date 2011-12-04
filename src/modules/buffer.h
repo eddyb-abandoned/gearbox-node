@@ -1,3 +1,5 @@
+#line 1 "src/modules/buffer.gear"
+
 // Copyright Joyent, Inc. and other Node contributors.
 //           (c) 2011 the gearbox-node project authors.
 //
@@ -25,24 +27,36 @@
 
 #include <gearbox.h>
 
+#line 25 "src/modules/buffer.gear"
+
 namespace Gearbox {
     enum encoding {ASCII, UTF8, BASE64, UCS2, BINARY, HEX};
     
     class Buffer : public Value {
-        public:
-            static bool is(const Value &that) {
-                if(!that.is<Object>())
-                    return false;
-                return that.to<v8::Handle<v8::Object>>()->GetIndexedPropertiesExternalArrayDataType() == v8::kExternalUnsignedByteArray;
-            }
-            
-            static uint8_t *data(const Value &that) {
-                return static_cast<uint8_t*>(that.to<v8::Handle<v8::Object>>()->GetIndexedPropertiesExternalArrayData());
-            }
-            
-            static size_t length(const Value &that) {
-                return that.to<v8::Handle<v8::Object>>()->GetIndexedPropertiesExternalArrayDataLength();
-            }
+    public:
+        Buffer(size_t size) : Value(getCtor().newInstance(size)) {}
+        static bool is(const Value &that) {
+            if(!that.is<Object>())
+                return false;
+            return that.to<v8::Handle<v8::Object>>()->GetIndexedPropertiesExternalArrayDataType() == v8::kExternalUnsignedByteArray;
+        }
+        
+        static uint8_t *data(const Value &that) {
+            return static_cast<uint8_t*>(that.to<v8::Handle<v8::Object>>()->GetIndexedPropertiesExternalArrayData());
+        }
+        
+        static size_t length(const Value &that) {
+            return that.to<v8::Handle<v8::Object>>()->GetIndexedPropertiesExternalArrayDataLength();
+        }
+        
+    private:
+        Value &getCtor() {
+            if(m_BufferCtor == undefined)
+                m_BufferCtor = Context::getCurrent()->global()["Buffer"];
+            return m_BufferCtor;
+        }
+        
+        static Value m_BufferCtor;
     };
 }
 

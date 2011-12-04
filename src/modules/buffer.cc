@@ -1,3 +1,5 @@
+#line 1 "src/modules/buffer.gear"
+
 // Copyright Joyent, Inc. and other Node contributors.
 //           (c) 2011 the gearbox-node project authors.
 //
@@ -27,32 +29,37 @@ using namespace Gearbox;
 
 /** \file src/modules/buffer.cc converted from src/modules/buffer.gear */
 
-#line 1 "src/modules/buffer.gear"
+#line 58 "src/modules/buffer.gear"
+
 #include <assert.h>
+#include <cstring>
+
+Value Buffer::m_BufferCtor;
 
 typedef void (*freeCallback)(uint8_t *data, void *hint);
 
 enum encoding parseEncoding(String encodingString, enum encoding _default) {
     if(!encodingString.length())
         return _default;
+    encodingString = encodingString.toLower();
     
-    if(encodingString.caseCompare("utf8") || encodingString.caseCompare("utf-8"))
+    if(encodingString == "utf8" || encodingString == "utf-8")
         return UTF8;
-    else if(encodingString.caseCompare("ascii"))
+    else if(encodingString == "ascii")
         return ASCII;
-    else if(encodingString.caseCompare("base64"))
+    else if(encodingString == "base64")
         return BASE64;
-    else if(encodingString.caseCompare("ucs2") || encodingString.caseCompare("ucs-2"))
+    else if(encodingString == "ucs2" || encodingString == "ucs-2")
         return UCS2;
-    else if(encodingString.caseCompare("binary"))
+    else if(encodingString == "binary")
         return BINARY;
-    else if(encodingString.caseCompare("hex"))
+    else if(encodingString == "hex")
         return HEX;
-    else if(encodingString.caseCompare("raw")) {
-        std::cerr << "'raw' (array of integers) has been removed. Use 'binary'.\n";
+    else if(encodingString == "raw") {
+        std::cerr << "'raw' (array of integers) has been removed. Use 'binary'." << std::endl;
         return BINARY;
-    } else if(encodingString.caseCompare("raws")) {
-        std::cerr << "'raws' encoding has been renamed to 'binary'. Please update your code.\n";
+    } else if(encodingString == "raws") {
+        std::cerr << "'raws' encoding has been renamed to 'binary'. Please update your code." << std::endl;
         return BINARY;
     }
     return _default;
@@ -127,9 +134,7 @@ ssize_t decodeWrite(uint8_t *_buffer, size_t length, Value val, enum encoding en
 }
 
 static size_t base64DecodedSize(const String &str) {
-    size_t size = str.length();
-    const char *const end = *str + size;
-    const size_t remainder = size % 4;
+    size_t size = str.length(), remainder = size % 4;
     
     size = (size / 4) * 3;
     if(remainder) {
@@ -143,9 +148,9 @@ static size_t base64DecodedSize(const String &str) {
     
     // Check for trailing padding (1 or 2 bytes)
     if(size > 0) {
-        if(end[-1] == '=')
+        if(str[str.length()-1] == '=')
             size--;
-        if(str[-2] == '=')
+        if(str[str.length()-2] == '=')
             size--;
     }
     
@@ -187,18 +192,18 @@ if(size_t(end) > This.nLength)                    \
 
 struct _buffer_binding_SlowBuffer_wrap /*: public Value::DtorWrap*/ {
     size_t nLength;
-    uint8_t *pData;
+    uint8_t *data;
     freeCallback pCallback;
     void *pCallbackHint;
 
     struct This : public Value {
-        This(v8::Handle<v8::Object> &&_this, _buffer_binding_SlowBuffer_wrap *wrap) : Value(_this), _wrap(wrap), nLength(wrap->nLength), pData(wrap->pData), pCallback(wrap->pCallback), pCallbackHint(wrap->pCallbackHint) {
+        This(v8::Handle<v8::Object> &&_this, _buffer_binding_SlowBuffer_wrap *wrap) : Value(_this), _wrap(wrap), nLength(wrap->nLength), data(wrap->data), pCallback(wrap->pCallback), pCallbackHint(wrap->pCallbackHint) {
             _this->SetPointerInInternalField(0, wrap);
         }
-        This(v8::Handle<v8::Object> &&_this) : Value(_this), _wrap(static_cast<_buffer_binding_SlowBuffer_wrap*>(_this->GetPointerFromInternalField(0))), nLength(_wrap->nLength), pData(_wrap->pData), pCallback(_wrap->pCallback), pCallbackHint(_wrap->pCallbackHint) {}
+        This(v8::Handle<v8::Object> &&_this) : Value(_this), _wrap(static_cast<_buffer_binding_SlowBuffer_wrap*>(_this->GetPointerFromInternalField(0))), nLength(_wrap->nLength), data(_wrap->data), pCallback(_wrap->pCallback), pCallbackHint(_wrap->pCallbackHint) {}
         _buffer_binding_SlowBuffer_wrap *_wrap;
         size_t &nLength;
-        uint8_t *&pData;
+        uint8_t *&data;
         freeCallback &pCallback;
         void *&pCallbackHint;
     };
@@ -207,16 +212,16 @@ struct _buffer_binding_SlowBuffer_wrap /*: public Value::DtorWrap*/ {
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_SlowBuffer(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This(), new _buffer_binding_SlowBuffer_wrap);
     if(args.Length() >= 1) {
-        #line 217 "src/modules/buffer.gear"
+        #line 229 "src/modules/buffer.gear"
         Value length(args[0]);
         This.nLength = length;
         if(This.nLength) {
-            This.pData = new uint8_t [This.nLength];
+            This.data = new uint8_t [This.nLength];
             v8::V8::AdjustAmountOfExternalAllocatedMemory(length);
         } else
-            This.pData = 0;
+            This.data = 0;
         
-        This.to<v8::Handle<v8::Object>>()->SetIndexedPropertiesToExternalArrayData(This.pData, v8::kExternalUnsignedByteArray, This.nLength);
+        This.to<v8::Handle<v8::Object>>()->SetIndexedPropertiesToExternalArrayData(This.data, v8::kExternalUnsignedByteArray, This.nLength);
         This["length"] = This.nLength;
         return undefined;
     }
@@ -226,10 +231,10 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_SlowBuffer(const v8::Arg
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_binarySlice(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 229 "src/modules/buffer.gear"
+        #line 241 "src/modules/buffer.gear"
         Value _start(args[0]), _end(args[1]);
         SLICE_ARGS
-        return encodeString(This.pData + start, end - start, BINARY);
+        return encodeString(This.data + start, end - start, BINARY);
     }
     THROW_ERROR("Invalid call to buffer.binding.SlowBuffer.prototype.binarySlice");
 }
@@ -237,10 +242,10 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_binarySlice(const v8::Ar
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_asciiSlice(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 232 "src/modules/buffer.gear"
+        #line 244 "src/modules/buffer.gear"
         Value _start(args[0]), _end(args[1]);
         SLICE_ARGS
-        return String(This.pData + start, end - start);
+        return String(This.data + start, end - start);
     }
     THROW_ERROR("Invalid call to buffer.binding.SlowBuffer.prototype.asciiSlice");
 }
@@ -248,10 +253,10 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_asciiSlice(const v8::Arg
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_utf8Slice(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 235 "src/modules/buffer.gear"
+        #line 247 "src/modules/buffer.gear"
         Value _start(args[0]), _end(args[1]);
         SLICE_ARGS
-        return String(This.pData + start, end - start);
+        return String(This.data + start, end - start);
     }
     THROW_ERROR("Invalid call to buffer.binding.SlowBuffer.prototype.utf8Slice");
 }
@@ -259,10 +264,10 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_utf8Slice(const v8::Argu
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_ucs2Slice(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 238 "src/modules/buffer.gear"
+        #line 250 "src/modules/buffer.gear"
         Value _start(args[0]), _end(args[1]);
         SLICE_ARGS
-        return v8::String::New(reinterpret_cast<uint16_t*>(This.pData + start), (end - start) / 2);
+        return v8::String::New(reinterpret_cast<uint16_t*>(This.data + start), (end - start) / 2);
     }
     THROW_ERROR("Invalid call to buffer.binding.SlowBuffer.prototype.ucs2Slice");
 }
@@ -270,7 +275,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_ucs2Slice(const v8::Argu
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_base64Slice(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 241 "src/modules/buffer.gear"
+        #line 253 "src/modules/buffer.gear"
         Value _start(args[0]), _end(args[1]);
         SLICE_ARGS
         int n = end - start;
@@ -284,10 +289,10 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_base64Slice(const v8::Ar
         bool b1_oob, b2_oob;
         
         while (i < end) {
-            bitbuf[0] = This.pData[i++];
+            bitbuf[0] = This.data[i++];
             
             if (i < end) {
-                bitbuf[1] = This.pData[i];
+                bitbuf[1] = This.data[i];
                 b1_oob = false;
             }  else {
                 bitbuf[1] = 0;
@@ -296,7 +301,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_base64Slice(const v8::Ar
             i++;
             
             if (i < end) {
-                bitbuf[2] = This.pData[i];
+                bitbuf[2] = This.data[i];
                 b2_oob = false;
             }  else {
                 bitbuf[2] = 0;
@@ -343,10 +348,10 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_base64Slice(const v8::Ar
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_fill(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 3) {
-        #line 307 "src/modules/buffer.gear"
+        #line 319 "src/modules/buffer.gear"
         Value value(args[0]), _start(args[1]), _end(args[2]);
         SLICE_ARGS
-        memset(This.pData + start, value.to<uint8_t>(), end - start);
+        std::fill(This.data + start, This.data + end, value.to<uint8_t>());
         return undefined;
     }
     THROW_ERROR("Invalid call to buffer.binding.SlowBuffer.prototype.fill");
@@ -355,7 +360,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_fill(const v8::Arguments
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_copy(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 3) {
-        #line 311 "src/modules/buffer.gear"
+        #line 323 "src/modules/buffer.gear"
         Value target(args[0]), _targetStart(args[1]), _sourceStart(args[2]);
         if(!target.is<Buffer>())
             THROW_TYPE_ERROR("Target should be a Buffer");
@@ -385,7 +390,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_copy(const v8::Arguments
                          MIN(targetLength - targetStart, This.nLength - sourceStart));
         
         // Need to use slightly slower memmove if the ranges might overlap
-        memmove(targetData + targetStart, This.pData + sourceStart, toCopy);
+        std::memmove(targetData + targetStart, This.data + sourceStart, toCopy);
         
         return Integer(toCopy);
     }
@@ -395,7 +400,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_copy(const v8::Arguments
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_binaryWrite(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 345 "src/modules/buffer.gear"
+        #line 357 "src/modules/buffer.gear"
         Value string(args[0]), _offset(args[1]);
         size_t length = string.length(), offset = _offset;
         
@@ -404,7 +409,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_binaryWrite(const v8::Ar
         
         size_t maxLength = args[2]->IsUndefined() ? This.nLength - offset : args[2]->Uint32Value(); //FIXME optArgs
         maxLength = MIN(length, MIN(This.nLength - offset, maxLength));
-        return Integer(decodeWrite(This.pData + offset, maxLength, string, BINARY));
+        return Integer(decodeWrite(This.data + offset, maxLength, string, BINARY));
     }
     THROW_ERROR("Invalid call to buffer.binding.SlowBuffer.prototype.binaryWrite");
 }
@@ -412,7 +417,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_binaryWrite(const v8::Ar
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_asciiWrite(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 355 "src/modules/buffer.gear"
+        #line 367 "src/modules/buffer.gear"
         Value string(args[0]), _offset(args[1]);
         v8::Handle<v8::String> s = string;
         size_t length = string.length(), offset = _offset;
@@ -422,7 +427,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_asciiWrite(const v8::Arg
         
         size_t maxLength = args[2]->IsUndefined() ? This.nLength - offset : args[2]->Uint32Value(); //FIXME optArgs
         maxLength = MIN(length, MIN(This.nLength - offset, maxLength));
-        return Integer(s->WriteAscii(reinterpret_cast<char*>(This.pData + offset), 0, maxLength,
+        return Integer(s->WriteAscii(reinterpret_cast<char*>(This.data + offset), 0, maxLength,
                                     (v8::String::HINT_MANY_WRITES_EXPECTED | v8::String::NO_NULL_TERMINATION)));
     }
     THROW_ERROR("Invalid call to buffer.binding.SlowBuffer.prototype.asciiWrite");
@@ -431,7 +436,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_asciiWrite(const v8::Arg
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_utf8Write(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 367 "src/modules/buffer.gear"
+        #line 379 "src/modules/buffer.gear"
         Value string(args[0]), _offset(args[1]);
         v8::Handle<v8::String> s = string;
         
@@ -446,7 +451,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_utf8Write(const v8::Argu
         
         size_t maxLength = args[2]->IsUndefined() ? This.nLength - offset : args[2]->Uint32Value(); //FIXME optArgs
         maxLength = MIN(This.nLength - offset, maxLength);
-        return Integer(s->WriteUtf8(reinterpret_cast<char*>(This.pData + offset), maxLength, NULL,
+        return Integer(s->WriteUtf8(reinterpret_cast<char*>(This.data + offset), maxLength, NULL,
                                     (v8::String::HINT_MANY_WRITES_EXPECTED | v8::String::NO_NULL_TERMINATION)));
     }
     THROW_ERROR("Invalid call to buffer.binding.SlowBuffer.prototype.utf8Write");
@@ -455,7 +460,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_utf8Write(const v8::Argu
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_ucs2Write(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 384 "src/modules/buffer.gear"
+        #line 396 "src/modules/buffer.gear"
         Value string(args[0]), _offset(args[1]);
         v8::Handle<v8::String> s = string;
         size_t length = string.length(), offset = _offset;
@@ -466,10 +471,10 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_ucs2Write(const v8::Argu
         size_t maxLength = args[2]->IsUndefined() ? This.nLength - offset : args[2]->Uint32Value(); //FIXME optArgs
         maxLength = MIN(This.nLength - offset, maxLength) / 2;
         
-        char *p = reinterpret_cast<char*>(This.pData + offset);
+        char *p = reinterpret_cast<char*>(This.data + offset);
         
         int charsWritten;
-        return Integer(s->Write(reinterpret_cast<uint16_t*>(This.pData + offset), 0, maxLength,
+        return Integer(s->Write(reinterpret_cast<uint16_t*>(This.data + offset), 0, maxLength,
                                     (v8::String::HINT_MANY_WRITES_EXPECTED | v8::String::NO_NULL_TERMINATION)));
     }
     THROW_ERROR("Invalid call to buffer.binding.SlowBuffer.prototype.ucs2Write");
@@ -478,7 +483,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_ucs2Write(const v8::Argu
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_base64Write(const v8::Arguments &args) {
     _buffer_binding_SlowBuffer_wrap::This This(args.This());
     if(args.Length() >= 2) {
-        #line 400 "src/modules/buffer.gear"
+        #line 412 "src/modules/buffer.gear"
         Value _string(args[0]), _offset(args[1]);
         assert(unbase64('/') == 63);
         assert(unbase64('+') == 62);
@@ -504,9 +509,9 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_base64Write(const v8::Ar
             THROW_TYPE_ERROR("Buffer too small");
         
         char a, b, c, d;
-        char *start = reinterpret_cast<char*>(This.pData + offset);
+        char *start = reinterpret_cast<char*>(This.data + offset);
         char *dst = start;
-        const char *src = *string;
+        const char *src = string;
         const char *const srcEnd = src + string.length();
         
         while(src < srcEnd) {
@@ -547,7 +552,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_base64Write(const v8::Ar
 
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_byteLength(const v8::Arguments &args) {
     if(args.Length() >= 2) {
-        #line 464 "src/modules/buffer.gear"
+        #line 476 "src/modules/buffer.gear"
         Value string(args[0]), _enc(args[1]);
         enum encoding enc = parseEncoding(_enc, UTF8);
         
@@ -566,7 +571,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_byteLength(const v8::Arg
 
 static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_makeFastBuffer(const v8::Arguments &args) {
     if(args.Length() >= 4) {
-        #line 478 "src/modules/buffer.gear"
+        #line 490 "src/modules/buffer.gear"
         Value _buffer(args[0]), fastBuffer(args[1]), offset(args[2]), length(args[3]);
         if(!_buffer.is<Buffer>())
             THROW_TYPE_ERROR("First argument must be a Buffer");
@@ -581,7 +586,7 @@ static v8::Handle<v8::Value> _buffer_binding_SlowBuffer_makeFastBuffer(const v8:
 }
 
 
-#line 584 "src/modules/buffer.cc"
+#line 589 "src/modules/buffer.cc"
 static void _setup_buffer(Value exports, Value require, Value module) {
     var binding = Object();
     v8::Handle<v8::FunctionTemplate> _buffer_binding_SlowBuffer = v8::FunctionTemplate::New(_buffer_binding_SlowBuffer_SlowBuffer);
