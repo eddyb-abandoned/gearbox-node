@@ -25,10 +25,9 @@ using namespace Gearbox;
 
 /** \file src/modules/_linklist.cc converted from src/modules/_linklist.js */
 
-#line 1 "src/modules/_linklist.js"
 
 
-#line 31 "src/modules/_linklist.js"
+#line 30 "src/modules/_linklist.cc"
 static void _setup__linklist(Value exports, Value require, Value module) {
     Context::getCurrent()->runScript("(function(exports, require, module){\n\nfunction init(list) {\n  list._idleNext = list;\n  list._idlePrev = list;\n}\nexports.init = init;\n\n\n// show the most idle item\nfunction peek(list) {\n  if (list._idlePrev == list) return null;\n  return list._idlePrev;\n}\nexports.peek = peek;\n\n\n// remove the most idle item from the list\nfunction shift(list) {\n  var first = list._idlePrev;\n  remove(first);\n  return first;\n}\nexports.shift = shift;\n\n\n// remove a item from its list\nfunction remove(item) {\n  if (item._idleNext) {\n    item._idleNext._idlePrev = item._idlePrev;\n  }\n\n  if (item._idlePrev) {\n    item._idlePrev._idleNext = item._idleNext;\n  }\n\n  item._idleNext = null;\n  item._idlePrev = null;\n}\nexports.remove = remove;\n\n\n// remove a item from its list and place at the end.\nfunction append(list, item) {\n  remove(item);\n  item._idleNext = list._idleNext;\n  list._idleNext._idlePrev = item;\n  item._idlePrev = list;\n  list._idleNext = item;\n}\nexports.append = append;\n\n\nfunction isEmpty(list) {\n  return list._idleNext === list;\n}\nexports.isEmpty = isEmpty;\n})", "gear:_linklist")(exports, require, module);
 }

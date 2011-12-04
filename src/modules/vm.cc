@@ -1,3 +1,5 @@
+#line 1 "src/modules/vm.gear"
+
 // Copyright Joyent, Inc. and other Node contributors.
 //           (c) 2011 the gearbox-node project authors.
 //
@@ -26,7 +28,6 @@ using namespace Gearbox;
 
 /** \file src/modules/vm.cc converted from src/modules/vm.gear */
 
-#line 1 "src/modules/vm.gear"
 
 static v8::Handle<v8::Value> _vm_exports_Script_Script(const v8::Arguments &args) {
     Value This(args.This());
@@ -56,7 +57,7 @@ static v8::Handle<v8::Value> _vm_exports_runInNewContext(const v8::Arguments &ar
 }
 
 
-#line 59 "src/modules/vm.cc"
+#line 60 "src/modules/vm.cc"
 static void _setup_vm(Value exports, Value require, Value module) {
     v8::Handle<v8::FunctionTemplate> _vm_exports_Script = v8::FunctionTemplate::New(_vm_exports_Script_Script);
     _vm_exports_Script->SetClassName(String("Script"));

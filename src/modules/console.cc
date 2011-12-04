@@ -25,10 +25,9 @@ using namespace Gearbox;
 
 /** \file src/modules/console.cc converted from src/modules/console.js */
 
-#line 1 "src/modules/console.js"
 
 
-#line 31 "src/modules/console.js"
+#line 30 "src/modules/console.cc"
 static void _setup_console(Value exports, Value require, Value module) {
     Context::getCurrent()->runScript("(function(exports, require, module){\n\nvar util = require('util');\n\nexports.log = function() {\n  process.stdout.write(util.format.apply(this, arguments) + '\\n');\n};\n\n\nexports.info = exports.log;\n\n\nexports.warn = function() {\n  process.stderr.write(util.format.apply(this, arguments) + '\\n');\n};\n\n\nexports.error = exports.warn;\n\n\nexports.dir = function(object) {\n  process.stdout.write(util.inspect(object) + '\\n');\n};\n\n\nvar times = {};\nexports.time = function(label) {\n  times[label] = Date.now();\n};\n\n\nexports.timeEnd = function(label) {\n  var duration = Date.now() - times[label];\n  exports.log('%s: %dms', label, duration);\n};\n\n\nexports.trace = function(label) {\n  // TODO probably can to do this better with V8's debug object once that is\n  // exposed.\n  var err = new Error;\n  err.name = 'Trace';\n  err.message = label || '';\n  Error.captureStackTrace(err, arguments.callee);\n  console.error(err.stack);\n};\n\n\nexports.assert = function(expression) {\n  if (!expression) {\n    var arr = Array.prototype.slice.call(arguments, 1);\n    require('assert').ok(false, util.format.apply(this, arr));\n  }\n};\n})", "gear:console")(exports, require, module);
 }

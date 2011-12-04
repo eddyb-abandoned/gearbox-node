@@ -25,10 +25,9 @@ using namespace Gearbox;
 
 /** \file src/modules/sys.cc converted from src/modules/sys.js */
 
-#line 1 "src/modules/sys.js"
 
 
-#line 31 "src/modules/sys.js"
+#line 30 "src/modules/sys.cc"
 static void _setup_sys(Value exports, Value require, Value module) {
     Context::getCurrent()->runScript("(function(exports, require, module){\n\nvar util = require('util');\n\nvar sysWarning;\nif (!sysWarning) {\n  sysWarning = 'The \"sys\" module is now called \"util\". ' +\n               'It should have a similar interface.';\n  util.error(sysWarning);\n}\n\nexports.print = util.print;\nexports.puts = util.puts;\nexports.debug = util.debug;\nexports.error = util.error;\nexports.inspect = util.inspect;\nexports.p = util.p;\nexports.log = util.log;\nexports.exec = util.exec;\nexports.pump = util.pump;\nexports.inherits = util.inherits;\n})", "gear:sys")(exports, require, module);
 }
