@@ -8,54 +8,6 @@
     'node_use_dtrace': 'false',
     'node_use_openssl%': 'true',
     'node_use_system_openssl%': 'false',
-    'gear_files': [
-      'src/main.gear',
-      'src/modules/_linklist.js',
-      'src/modules/assert.js',
-      'src/modules/buffer.gear',
-      'src/modules/buffer_ieee754.js',
-      'src/modules/console.js',
-      'src/modules/constants.gear',
-      'src/modules/events.js',
-      'src/modules/fs.gear',
-      'src/modules/path.js',
-      'src/modules/punycode.js',
-      'src/modules/module.gear',
-      'src/modules/net.gear',
-      'src/modules/readline.js',
-      'src/modules/repl.js',
-      'src/modules/stream.js',
-      'src/modules/sys.js',
-      'src/modules/timers.gear',
-      'src/modules/tty.gear',
-      'src/modules/url.js',
-      'src/modules/util.js',
-      'src/modules/vm.gear',
-    ],
-    'gear_output': [
-      'src/main.cc',
-      'src/modules/_linklist.cc',
-      'src/modules/assert.cc',
-      'src/modules/buffer.cc',
-      'src/modules/buffer_ieee754.cc',
-      'src/modules/console.cc',
-      'src/modules/constants.cc',
-      'src/modules/events.cc',
-      'src/modules/fs.cc',
-      'src/modules/path.cc',
-      'src/modules/punycode.cc',
-      'src/modules/module.cc',
-      'src/modules/net.cc',
-      'src/modules/readline.cc',
-      'src/modules/repl.cc',
-      'src/modules/stream.cc',
-      'src/modules/sys.cc',
-      'src/modules/timers.cc',
-      'src/modules/tty.cc',
-      'src/modules/url.cc',
-      'src/modules/util.cc',
-      'src/modules/vm.cc',
-    ],
   },
 
   'targets': [
@@ -67,7 +19,6 @@
         'deps/http_parser/http_parser.gyp:http_parser',
         'deps/uv/uv.gyp:uv',
         'deps/zlib/zlib.gyp:zlib',
-        'gears#host',
       ],
 
       'include_dirs': [
@@ -76,14 +27,35 @@
       ],
 
       'sources': [
-        #'src/main.cc',
+        'src/main.cc',
         'src/Context.cc',
         'src/NativeModule.cc',
         'src/String.cc',
         'src/TryCatch.cc',
         'src/Value.cc',
         
-        '<@(gear_output)',
+        # Modules
+        'src/modules/_linklist.cc',
+        'src/modules/assert.cc',
+        'src/modules/buffer.cc',
+        'src/modules/buffer_ieee754.cc',
+        'src/modules/console.cc',
+        'src/modules/constants.cc',
+        'src/modules/events.cc',
+        'src/modules/fs.cc',
+        'src/modules/module.cc',
+        'src/modules/net.cc',
+        'src/modules/path.cc',
+        'src/modules/punycode.cc',
+        'src/modules/readline.cc',
+        'src/modules/repl.cc',
+        'src/modules/stream.cc',
+        'src/modules/sys.cc',
+        'src/modules/timers.cc',
+        'src/modules/tty.cc',
+        'src/modules/url.cc',
+        'src/modules/util.cc',
+        'src/modules/vm.cc',
         
         # headers to make for a more pleasant IDE experience
         'src/Context.h',
@@ -96,8 +68,6 @@
         'deps/http_parser/http_parser.h',
         #'deps/v8/include/v8.h',
         #'deps/v8/include/v8-debug.h',
-        
-        '<@(gear_files)',
       ],
 
       'defines': [
@@ -185,60 +155,6 @@
       },
       'cflags_cc': [ '-std=c++0x', '-Wno-unused' ],
     },
-
-    {
-      'target_name': 'gear2cc',
-      'type': 'none',
-      'toolsets': ['host'],
-      'variables': {
-      },
-
-      'actions': [
-        {
-          'action_name': 'gear2cc',
-
-          'inputs': [
-            'tools/gear2cc/aze2js.js',
-            'tools/gear2cc/gear2cc.aze',
-          ],
-
-          'outputs': [
-            'tools/gear2cc/gear2cc.js',
-          ],
-          
-          'action': ['./node', 'tools/gear2cc/aze2js.js', 'tools/gear2cc/gear2cc.aze', 'tools/gear2cc/gear2cc.js'],
-        },
-      ],
-    }, # end gear2cc
-
-    {
-      'target_name': 'gears',
-      'type': 'none',
-      'toolsets': ['host'],
-      'variables': {
-      },
-      
-      'dependencies': [
-        'gear2cc#host',
-      ],
-
-      'actions': [
-        {
-          'action_name': 'gears',
-
-          'inputs': [
-            'tools/gear2cc/gear2cc.js',
-            '<@(gear_files)',
-          ],
-
-          'outputs': [
-            '<@(gear_output)',
-          ],
-          
-          'action': ['./node', 'tools/gear2cc/gear2cc.js', '<@(gear_files)'],
-        },
-      ],
-      
-    }, # end gears
   ] # end targets
 }
+

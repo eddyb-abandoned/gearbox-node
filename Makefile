@@ -1,6 +1,6 @@
 BUILDTYPE ?= Release
 
-all: out/Makefile
+all: gear2cc out/Makefile
 	$(MAKE) -C out BUILDTYPE=$(BUILDTYPE)
 	-ln -fs out/Release/node node
 	-ln -fs out/Debug/node node_g
@@ -9,6 +9,9 @@ out/Release/node: all
 
 out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp deps/v8/build/common.gypi deps/v8/tools/gyp/v8.gyp node.gyp options.gypi
 	tools/gyp_node -f make
+
+gear2cc:
+	$(MAKE) -f gear2cc.mk
 
 install uninstall:
 	@echo '`make $(@)` is not implemented yet. Bug bnoordhuis about it in #node.js'
