@@ -73,7 +73,7 @@ function createObject(name, childs, line, type) {
                                     if(!(j == 'functions' && k == nn))
                                         baseNode[j][k] = x[j][k];
                     }
-                for(var i = 0; i < node.inheritList.length; i++)
+                    for(var i = 0; i < node.inheritList.length; i++)
                         extend(out.classes[node.inheritList[i]], node.inheritList[i]);
                     extend(node);
                     out.classes[node.name] = baseNode;
@@ -94,7 +94,9 @@ function createObject(name, childs, line, type) {
                 out.nativeSetups[node.name] = {args:node.args, objects:node.objects, classes:node.classes, vars:node.vars, functions:node.functions, nativeBlocks:node.nativeBlocks};
                 break;
             case 'native-block':
-                out.nativeBlocks[node.which] = out.nativeBlocks[node.which] ? (out.nativeBlocks[node.which] + '\n' + node.code) : node.code;
+                if(node.which != 'js')
+                    node.code = makeLine('\t', node.line) + '\n' + node.code;
+                out.nativeBlocks[node.which] = out.nativeBlocks[node.which] ? (out.nativeBlocks[node.which] + node.code) : node.code;
         }
     }
     
@@ -102,6 +104,17 @@ function createObject(name, childs, line, type) {
     //    out.functions['toString'] = [{args:[], code:'return String("['+type+' '+name+']");', line:line}];
     
     return out;
+}
+
+function makeTabs(n, ch) {
+    var s = '';
+    for(var i = 0; i < n; i++)
+        s += ch;
+    return s;
+}
+
+function makeLine(tbs, line) {
+    return tbs + '#line ' + line + ' "' + gear.src + '"';
 }
 
 function nLines(s){return s.replace(/[^\n]/g,'').length;}
@@ -119,6 +132,7 @@ $aze.symbols.identifierList = new codeaze.Symbol('(identifier( /,/ identifier)*)
 $aze.symbols.bulkCode = new codeaze.Symbol(/(\/\/.*|\/\*.*?\*\/|[^;{}()]+)/, function($){var $$;l+=nLines($[0]);$$=$[0];return $$;});
 $aze.symbols.nativeCodeInline = new codeaze.Symbol('(bulkCode|/\\(/nativeCodeInline/\\)/)*', function($){var $$;$$=$[0].map(function(x){return x.length>1?x[0][0]+x[1]+x[2][0]:x[0]}).reduce(sum,'');return $$;});
 $aze.symbols.nativeCode = new codeaze.Symbol('(bulkCode|/;/|/{/nativeCode/}/|/\\(/nativeCode/\\)/)*', function($){var $$;$$=$[0].map(function(x){return x.length>1?x[0][0]+x[1]+x[2][0]:(x[0][0]==';'?';':x[0])}).reduce(sum,'');return $$;});
+$aze.symbols.nativeCodeBlock = new codeaze.Symbol('/{/nativeCode/}/|nativeCodeInline /;/', function($){var $$;$$=$[0][0]=='{'?$[1]:($[0]+';');return $$;});
 $aze.symbols.module = new codeaze.Symbol('l/module/ +identifier /{/ moduleContents /}/', function($){var $$;$$=createObject($[3], $[7], $[0], 'module');return $$;});
 $aze.symbols.moduleContents = new codeaze.Symbol('( +|object|nativeBlock)*', function($){var $$;$$=$[0].map(function(x){return x[0]}).filter(function(x){return !x.length});return $$;});
 $aze.symbols.object = new codeaze.Symbol('l/object/ +identifier /{/ objectContents /}/', function($){var $$;$$=createObject($[3], $[7], $[0], 'object');return $$;});
@@ -127,24 +141,13 @@ $aze.symbols.class = new codeaze.Symbol('l/class/ +identifier( /:/ identifierLis
 $aze.symbols.classContents = new codeaze.Symbol('( +|object|class|variableDef|nativeVar|function|getter|setter|nativeBlock)*', function($){var $$;$$=$[0].map(function(x){return x[0]}).filter(function(x){return !x.length});return $$;});
 $aze.symbols.variableDef = new codeaze.Symbol('l(/static/ )?/var/ +identifier /=/ nativeCodeInline /;/', function($){var $$;$$={type:$[1]?'static-var':'var', name:$[4], val:$[8]};return $$;});
 $aze.symbols.nativeVar = new codeaze.Symbol('l/native/ +identifier( /[*]*/ | +)identifier (/=/ nativeCodeInline )?/;/', function($){var $$;$$={type:'native-var', name:$[5], _type:$[3]+' '+($[4][1]||''), val:$[7] ? $[7][2] : null};return $$;});
-$aze.symbols.function = new codeaze.Symbol('l(/static/ )?(/function/ +)?identifier /\\(/ identifierList /\\)/ /{/nativeCode/}/', function($){var $$;$$={type:$[1]?'static-function':'function', name:$[3], args:$[7], code:$[12], line:$[0]};return $$;});
-$aze.symbols.getter = new codeaze.Symbol('l/get/ +identifier /\\(/ /\\)/ /{/nativeCode/}/', function($){var $$;$$={type:'getter', name:$[3], args:[], code:$[10], line:$[0]};return $$;});
-$aze.symbols.setter = new codeaze.Symbol('l/set/ +identifier /\\(/ identifier /\\)/ /{/nativeCode/}/', function($){var $$;$$={type:'setter', name:$[3], args:[$[7]], code:$[12], line:$[0]};return $$;});
-$aze.symbols.nativeBlock = new codeaze.Symbol('l,identifier /{/nativeCode/}/', function($){var $$;$$={type:'native-block', which:$[1], code:$[4], line:$[0]};return $$;});
+$aze.symbols.function = new codeaze.Symbol('l(/static/ )?(/function/ +)?identifier /\\(/ identifierList /\\)/ nativeCodeBlock', function($){var $$;$$={type:$[1]?'static-function':'function', name:$[3], args:$[7], code:$[11], line:$[0]};return $$;});
+$aze.symbols.getter = new codeaze.Symbol('l/get/ +identifier /\\(/ /\\)/ nativeCodeBlock', function($){var $$;$$={type:'getter', name:$[3], args:[], code:$[9], line:$[0]};return $$;});
+$aze.symbols.setter = new codeaze.Symbol('l/set/ +identifier /\\(/ identifier /\\)/ nativeCodeBlock', function($){var $$;$$={type:'setter', name:$[3], args:[$[7]], code:$[11], line:$[0]};return $$;});
+$aze.symbols.nativeBlock = new codeaze.Symbol('l,identifier nativeCodeBlock', function($){var $$;$$={type:'native-block', which:$[1], code:$[3], line:$[0]};return $$;});
 $aze.symbols.nativeSetup = new codeaze.Symbol('l/native/ +identifier /\\(/ identifierList /\\)/ /{/ moduleContents /}/', function($){var $$;$$=createObject($[3], $[13], $[0], 'native-setup'),$$.args=$[7];return $$;});
 $aze.symbols.main = new codeaze.Symbol('( +|module|nativeSetup|nativeBlock)*', function($){var $$;$$=$[0].map(function(x){return x[0]}).filter(function(x){return !x.length});return $$;});
 
-
-function makeTabs(n, ch) {
-    var s = '';
-    for(var i = 0; i < n; i++)
-        s += ch;
-    return s;
-}
-
-function makeLine(tbs, line) {
-    return '\n' + tbs + '#line ' + line + ' "' + gear.src + '"';
-}
 
 var lineNumber = 1;
 function generateFunctionCode(functions, name, parentPrefix, parentPath, code, _class, ctor, dest) {
@@ -161,9 +164,9 @@ function generateFunctionCode(functions, name, parentPrefix, parentPath, code, _
             for(var _arg in func.args)
                 argsLine += (argsLine ? ', ' : '') + func.args[_arg] + '(args[' + _arg + '])';
         if(argsLine)
-            actualCode = makeLine(tbs, func.line) + '\n' + tbs + 'Value ' + argsLine + ';' + actualCode;
+            actualCode = '\n'+makeLine(tbs, func.line) + '\n' + tbs + 'Value ' + argsLine + ';' + actualCode;
         else
-            actualCode = makeLine(tbs, func.line + 1) + actualCode;
+            actualCode = '\n'+makeLine(tbs, func.line + 1) + actualCode;
         
         replaces.push({regex:'\n' + makeTabs(prefix.split('_').length-1, '    '), replace:'\n' + tbs});
         if(dest!='setter')
@@ -348,13 +351,13 @@ function generateCode(gear, global) {
     
     var license = getBlock(global, 'license'), top = getBlock(global, 'top'), header = getBlock(global, 'header');
     var ccCode = license+'#include <gearbox.h>\n'+(global.nativeBlocks.header?'#include "'+gear.h.replace(/^([^/]*\/)+/,'')+'"\n':'')+'\nusing namespace Gearbox;\n\n\
-/** \\file '+gear.baseName+'.cc converted from '+gear.src+' */\n'+makeLine('',1) + '\n' + top;
+/** \\file '+gear.baseName+'.cc converted from '+gear.src+' */\n\n' + top;
 
     for(var name in global.modules) {
         code.func = code.init = '';
         generateModuleCode(global.modules[name], name, '', '', code);
         ccCode += code.func;
-        ccCode += makeLine('',nLines(ccCode)+2).replace('.gear','.cc') + '\n'+
+        ccCode += '\n'+makeLine('',nLines(ccCode)+2).replace(/\.(gear|js)/,'.cc') + '\n'+
             'static void _setup_' + name + '(Value exports, Value require, Value module) {\n' + code.init + '}\n'+
             'static NativeModule _module_' + name + '("'+name+'", _setup_' + name + ');';
     }
@@ -362,7 +365,7 @@ function generateCode(gear, global) {
         code.func = code.init = '';
         generateModuleCode(global.nativeSetups[name], name, '', '', code);
         ccCode += code.func;
-        ccCode += makeLine('',nLines(ccCode)+2).replace('.gear','.cc') + '\n'+
+        ccCode += '\n'+makeLine('',nLines(ccCode)+2).replace(/\.(gear|js)/,'.cc') + '\n'+
             'void '+name+'('+global.nativeSetups[name].args.map(function(x){return 'Value '+x}).join(', ')+') {\n' + code.init + '}\n';
     }
     
@@ -390,7 +393,7 @@ if(arguments.length > 1) {
         if(ext == 'gear')
             generateCode(gear, createObject('', $aze.parse(src), 1));
         else if(ext == 'js') {
-        var licenseRegExp = /[ \t]*\/\/.*copyright.*(\n[ \t]*\/\/.*)*/mi, license = null;
+            var licenseRegExp = /[ \t]*\/\/.*copyright.*(\n[ \t]*\/\/.*)*/mi, license = null;
             if(license = licenseRegExp.exec(src)) {
                 index = license.index;
                 license = license[0];
