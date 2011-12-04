@@ -38,13 +38,13 @@ namespace Gearbox {
                 Integer,
                 Number
             };
-            Primitive(Kind kind=Undefined, int64_t iValue=0) : m_Kind(kind) {
+            Primitive(Kind kind=Undefined, int64_t iValue=0) : m_Kind(kind), m_iValue(0), m_dValue(0) {
                 if(kind == Integer)
                     m_iValue = iValue;
                 else if(kind == Number)
                     m_dValue = iValue;
             }
-            Primitive(Kind kind, double dValue) : m_Kind(kind) {
+            Primitive(Kind kind, double dValue) : m_Kind(kind), m_iValue(0), m_dValue(0) {
                 if(kind == Integer)
                     m_iValue = dValue;
                 else if(kind == Number)
@@ -73,8 +73,10 @@ namespace Gearbox {
                 return v8::Undefined();
             }
             
-            void from(v8::Handle<v8::Value> hValue) {
-                if(hValue->IsNumber()) {
+            bool from(const v8::Handle<v8::Value> &hValue) {
+                if(hValue.IsEmpty() || hValue->IsUndefined())
+                    m_Kind = Undefined;
+                else if(hValue->IsNumber()) {
                     m_Kind = Number;
                     m_dValue = hValue->NumberValue();
                 }
@@ -82,14 +84,13 @@ namespace Gearbox {
                     m_Kind = Integer;
                     m_iValue = hValue->IntegerValue();
                 }
+                else if(hValue->IsBoolean())
+                    m_Kind = hValue->BooleanValue() ? True : False;
                 else if(hValue->IsNull())
                     m_Kind = Null;
-                else if(hValue->IsFalse())
-                    m_Kind = False;
-                else if(hValue->IsTrue())
-                    m_Kind = True;
                 else 
-                    m_Kind = Undefined;
+                    return true;
+                return false;
             }
             
             bool operator==(Primitive that) {
@@ -104,23 +105,21 @@ namespace Gearbox {
             
         private:
             Kind m_Kind;
-            union {
-                int64_t m_iValue;
-                double m_dValue;
-            };
+            int64_t m_iValue;
+            double m_dValue;
             friend class Value;
     };
     
-    static Primitive undefined;
-    static Primitive null(Primitive::Null);
+    const Primitive undefined = Primitive::Undefined;
+    const Primitive null = Primitive::Null;
     
     template <class Node, class Index>
     class Assignable : public Node {
         public:
-            Assignable(const Node &parent, const Index &index)/* : m_Parent(parent), m_Index(index)*/ {
-                m_Parent = parent;
+            Assignable(const Node &parent, const Index &index) : m_Parent(parent)/*, m_Index(index)*/ {
+                //m_Parent = parent;
                 m_Index = index;
-                from(m_Parent.get(m_Index));
+                Node::from(m_Parent.get(m_Index));
             }
             template <class T>
             Node &operator=(const T &_that) {
@@ -142,13 +141,21 @@ namespace Gearbox {
                 m_Parent.set(m_Index, that);
                 return *this;
             }
+            /*Node &operator=(const Assignable &that) {
+                m_Parent.set(m_Index, that);
+                return *this;
+            }
+            Node &operator=(const Assignable &&that) {
+                m_Parent.set(m_Index, that);
+                return *this;
+            }*/
             template <class... Args>
-            Node operator()(Args... _args) {
-                return call(m_Parent, _args...);
+            Node operator()(Args... _args) const {
+                return Node::call(m_Parent, _args...);
             }
             
         private:
-            Node m_Parent;
+            const Node &m_Parent;
             Index m_Index;
     };
     
@@ -186,15 +193,26 @@ namespace Gearbox {
                 else
                     from(that.m_hValue);
             }
-            void from(v8::Handle<v8::Value>);
+            void from(const v8::Handle<v8::Value> &that) {
+                if(m_pValue.from(that))
+                    m_hValue = v8::Persistent<v8::Value>::New(that);
+                /*if(that.IsEmpty() || that->IsUndefined())
+                    from(undefined);
+                else if(!that->IsUint32() || that->IsInt32() ||  that->IsNumber() || that->IsUndefined() || that->IsNull() || that->IsBoolean())
+                    m_pValue.from(that);
+                else
+                    m_hValue = v8::Persistent<v8::Value>::New(that);*/
+            }
             template <class T>
-            void from(v8::Handle<T> that) {
+            void from(const v8::Handle<T> &that) {
                 from(v8::Handle<v8::Value>(that));
             }
-            void from(String that) {
+            void from(const String &that) {
                 from(that.operator v8::Handle<v8::Value>());
             }
-            void from(Primitive);
+            void from(const Primitive &that) {
+                m_pValue = that;
+            }
             void from(const char *that) {
                 from(v8::String::New(that));
             }
@@ -227,9 +245,11 @@ namespace Gearbox {
             void from(bool that) {
                 from(Primitive(that ? Primitive::True : Primitive::False));
             }
-            void from(void *that) {
+            template <class T>
+            void from(T *that)=delete;/* {
+                //static_assert(sizeof(T)<0, "Value::from<T*> is deprecated!");
                 from(v8::External::New(that));
-            }
+            }*/
             
             /** Conversion tools, used to get primitive values */
             template <class T>
@@ -237,82 +257,116 @@ namespace Gearbox {
                 return to(Type<T>());
             }
             
-            v8::Handle<v8::Value> to(Type<v8::Handle<v8::Value>>) const;
-            v8::Handle<v8::Data> to(Type<v8::Handle<v8::Data>>) const {
+#define _TO(T) T to(Type<T>) const
+            template <class T> _TO(T) {
+                static_assert(sizeof(T)<0, "Value::to<T> called with no specialization for T!");
+            }
+            
+            _TO(v8::Handle<v8::Value>) {
+                if(m_hValue.IsEmpty())
+                    return m_pValue;
+                else
+                    return m_hValue;
+            }
+            _TO(v8::Handle<v8::Data>) {
                 return to<v8::Handle<v8::Value>>();
             }
-            template <class T>
-            v8::Handle<T> to(Type<v8::Handle<T>>) const {
+            template <class T> _TO(v8::Handle<T>) {
                 return v8::Handle<T>::Cast(to<v8::Handle<v8::Value>>());
             }
-            Primitive to(Type<Primitive>) const {
+            _TO(Primitive) {
                 if(m_hValue.IsEmpty())
                     return m_pValue;
                 Primitive value;
                 value.from(m_hValue);
                 return value;
             }
-            String to(Type<String>) const;
-            int64_t to(Type<int64_t>) const;
+            _TO(String) {
+                if(m_hValue.IsEmpty()) {
+                    v8::String::Utf8Value v(m_pValue.operator v8::Handle<v8::Value>());
+                    return String(*v);
+                }
+                v8::String::Utf8Value v(m_hValue);
+                return String(*v);
+            }
+            _TO(int64_t) {
+                if(m_hValue.IsEmpty()) {
+                    if(m_pValue.m_Kind == Primitive::Integer)return m_pValue.m_iValue;
+                    else if(m_pValue.m_Kind == Primitive::Number)return m_pValue.m_dValue;
+                    else if(m_pValue.m_Kind == Primitive::True)return 1;
+                    return 0;
+                }
+                return m_hValue->IntegerValue();
+            }
 #ifdef __LP64__
-            int64_t to(Type<long long int>) const {
+            _TO(long long int) {
                 return to<int64_t>();
             }
-            uint64_t to(Type<unsigned long long int>) const {
+            _TO(unsigned long long int) {
                 return to<int64_t>();
             }
 #endif
-            uint64_t to(Type<uint64_t>) const {
+            _TO(uint64_t) {
                 return to<int64_t>();
             }
-            uint32_t to(Type<uint32_t>) const {
+            _TO(uint32_t) {
                 return to<int64_t>();
             }
-            uint16_t to(Type<uint16_t>) const {
+            _TO(uint16_t) {
                 return to<int64_t>();
             }
-            int16_t to(Type<int16_t>) const {
+            _TO(int16_t) {
                 return to<int64_t>();
             }
-            char to(Type<char>) const {
+            _TO(char) {
                 return to<int64_t>();
             }
-            uint8_t to(Type<uint8_t>) const {
+            _TO(uint8_t) {
                 return to<int64_t>();
             }
-            int8_t to(Type<int8_t>) const {
+            _TO(int8_t) {
                 return to<int64_t>();
             }
-            int to(Type<int>) const {
+            _TO(int) {
                 return to<int64_t>();
             }
-            double to(Type<double>) const;
-            float to(Type<float>) const {
+            _TO(double) {
+                if(m_hValue.IsEmpty()) {
+                    if(m_pValue.m_Kind == Primitive::Number)return m_pValue.m_dValue;
+                    else if(m_pValue.m_Kind == Primitive::Integer)return m_pValue.m_iValue;
+                    else if(m_pValue.m_Kind == Primitive::True)return 1;
+                    return 0;
+                }
+                return m_hValue->NumberValue();
+            }
+            _TO(float) {
                 return to<double>();
             }
             long double to(Type<long double>) const {
                 return to<double>();
             }
-            bool to(Type<bool>) const;
+            _TO(bool) {
+                if(m_hValue.IsEmpty()) {
+                    if(m_pValue.m_Kind == Primitive::True)return true;
+                    else if(m_pValue.m_Kind == Primitive::Integer)return m_pValue.m_iValue;
+                    else if(m_pValue.m_Kind == Primitive::Number)return m_pValue.m_dValue;
+                    return false;
+                }
+                return m_hValue->BooleanValue();
+            }
             
             template <class T>
-            T *to(Type<T*>) const {
-                std::cerr << "Value::to<T*> is deprecated!" << std::endl;
-                if(m_hValue.IsEmpty() || !m_hValue->IsExternal() || !v8::External::Unwrap(m_hValue)) {
+            _TO(T*) {
+                static_assert(sizeof(T)<0, "Value::to<T*> is deprecated!");
+                /*if(m_hValue.IsEmpty() || !m_hValue->IsExternal() || !v8::External::Unwrap(m_hValue)) {
                     std::cerr << "Empty/NULL External!" << std::endl;
                     return 0;
                 }
-                return reinterpret_cast<T*>(v8::External::Unwrap(m_hValue));
+                return reinterpret_cast<T*>(v8::External::Unwrap(m_hValue));*/
             }
+#undef _TO
             
             /** Compare operators */
-#define DECLARE_OP(OP) \
-bool operator OP(Primitive that) { \
-    if(m_hValue.IsEmpty()) \
-        return m_pValue OP that; \
-    else \
-        return m_hValue->Equals(that);\
-}
             bool operator==(Value that) {
                 if(m_hValue.IsEmpty() && that.m_hValue.IsEmpty())
                     return m_pValue == that.m_pValue;
@@ -322,16 +376,17 @@ bool operator OP(Primitive that) { \
             bool operator!=(Value that) {
                 return !operator==(that);
             }
-            //DECLARE_OP(==)
-            //DECLARE_OP(!=)
-            //DECLARE_OP(>)
-            //DECLARE_OP(<)
-            //DECLARE_OP(>=)
-            //DECLARE_OP(<=)
-#undef DECLARE_OP
             
             /** Length, for Arrays and Strings */
-            int length() const;
+            int64_t length() const {
+                if(m_hValue.IsEmpty())
+                    return 0;
+                if(m_hValue->IsArray())
+                    return v8::Handle<v8::Array>::Cast(m_hValue)->Length();
+                if(m_hValue->IsString())
+                    return m_hValue->ToString()->Length();
+                return 0;
+            }
             
             /** Access to Object or Array elements */
             Assignable<Value, uint32_t> operator[](uint32_t idx) const {
@@ -346,35 +401,35 @@ bool operator OP(Primitive that) { \
             Assignable<Value, v8::Handle<v8::String>> operator[](const char *idx) const {
                 return Assignable<Value, v8::Handle<v8::String>>(*this, v8::String::NewSymbol(idx));
             }
-            /*Assignable<Value, String> operator[](const String &idx) const {
-                return Assignable<Value, String>(*this, idx);
-            }*/
+            Assignable<Value, v8::Handle<v8::String>> operator[](const String &idx) const {
+                return Assignable<Value, v8::Handle<v8::String>>(*this, v8::String::NewSymbol(idx, idx.length()));
+            }
             Value get(uint32_t idx) const {
                 if(m_hValue.IsEmpty() || !m_hValue->IsObject())
                     return undefined;
                 return m_hValue->ToObject()->Get(idx);
             }
-            Value get(String idx) const {
+            Value get(const String &idx) const {
                 if(m_hValue.IsEmpty() || !m_hValue->IsObject())
                     return undefined;
                 return m_hValue->ToObject()->Get(idx.operator v8::Handle<v8::Value>());
             }
-            Value get(v8::Handle<v8::String> idx) const {
+            Value get(const v8::Handle<v8::String> &idx) const {
                 if(m_hValue.IsEmpty() || !m_hValue->IsObject())
                     return undefined;
                 return m_hValue->ToObject()->Get(idx);
             }
-            void set(uint32_t idx, const Value &val) {
+            void set(uint32_t idx, const Value &val) const {
                 if(m_hValue.IsEmpty() || !m_hValue->IsObject())
                     return;
                 m_hValue->ToObject()->Set(idx, val);
             }
-            void set(String idx, const Value &val) {
+            void set(const String &idx, const Value &val) const {
                 if(m_hValue.IsEmpty() || !m_hValue->IsObject())
                     return;
                 m_hValue->ToObject()->Set(idx.operator v8::Handle<v8::Value>(), val);
             }
-            void set(v8::Handle<v8::String> idx, const Value &val) {
+            void set(const v8::Handle<v8::String> &idx, const Value &val) const {
                 if(m_hValue.IsEmpty() || !m_hValue->IsObject())
                     return;
                 m_hValue->ToObject()->Set(idx, val);
@@ -406,12 +461,12 @@ bool operator OP(Primitive that) { \
                 v8::Handle<v8::Value> args[sizeof...(_args)];
                 placeArgs(args, _args...);
                 
-                // Exceptions can be thrown, we are inside JavaScript
+                // Exceptions can be thrown, we are inside JavaScript.
                 bool bCanThrowBefore = tryCatchCanThrow(true);
                 
                 Value result = v8::Handle<v8::Function>::Cast(m_hValue)->Call(_this, sizeof...(_args), args);
                 
-                // We are back from JavaScript
+                // We are back from JavaScript.
                 tryCatchCanThrow(bCanThrowBefore);
                 
                 return result;
@@ -426,12 +481,12 @@ bool operator OP(Primitive that) { \
                 v8::Handle<v8::Value> args[sizeof...(_args)];
                 placeArgs(args, _args...);
                 
-                // Exceptions can be thrown, we are inside JavaScript
+                // Exceptions can be thrown, we are inside JavaScript.
                 bool bCanThrowBefore = tryCatchCanThrow(true);
                 
                 Value result = v8::Handle<v8::Function>::Cast(m_hValue)->NewInstance(sizeof...(_args), args);
                 
-                // We are back from JavaScript
+                // We are back from JavaScript.
                 tryCatchCanThrow(bCanThrowBefore);
                 
                 return result;
@@ -449,7 +504,12 @@ bool operator OP(Primitive that) { \
             /// FIXME Hack to get TryCatch::canThrow into call and newInstance.
             static bool tryCatchCanThrow(bool);
             
-            static void weakCallback(v8::Persistent<v8::Value>, void*);
+            static void weakCallback(v8::Persistent<v8::Value> that, void*) {
+                //if(/*that->IsExternal() || */that->ToObject()->HasIndexedPropertiesInExternalArrayData() && that->ToObject()->InternalFieldCount())
+                //    delete [] (uint8_t*)that->ToObject()->GetIndexedPropertiesExternalArrayData();
+                //    printf("TODO: need to delete user-related stuff on disposal\n");
+                that.Dispose();
+            }
             
             Primitive m_pValue;
             v8::Persistent<v8::Value> m_hValue;

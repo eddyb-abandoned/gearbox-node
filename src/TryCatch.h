@@ -80,7 +80,7 @@ namespace Gearbox {
             }
             
             static Value _throw(Value exception) {
-                if(m_pCurrentTryCatch) {
+                if(!canThrow() && m_pCurrentTryCatch) {
                     m_pCurrentTryCatch->m_TryCatch.Reset();
                     m_pCurrentTryCatch->m_bHasLocalException = true;
                     #if GEARBOX_TRY_CATCH_REPORT_STACKTRACE

@@ -30,9 +30,7 @@
         'src/main.cc',
         'src/Context.cc',
         'src/NativeModule.cc',
-        'src/String.cc',
         'src/TryCatch.cc',
-        'src/Value.cc',
         
         # Modules
         'src/modules/_linklist.cc',
