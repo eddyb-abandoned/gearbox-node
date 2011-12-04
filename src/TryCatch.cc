@@ -33,7 +33,7 @@ namespace Gearbox {
             else
                 stackTrace = Value(m_TryCatch.StackTrace());
             
-            std::cerr << *stackTrace << std::endl;
+            std::cerr << stackTrace << std::endl;
             
             m_TryCatch.Reset();
             m_bHasLocalException = false;
