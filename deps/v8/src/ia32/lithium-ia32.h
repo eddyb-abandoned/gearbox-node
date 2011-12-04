@@ -101,7 +101,7 @@ class LCodeGen;
   V(Integer32ToDouble)                          \
   V(InvokeFunction)                             \
   V(IsConstructCallAndBranch)                   \
-  V(IsNilAndBranch)                             \
+  V(IsNullAndBranch)                            \
   V(IsObjectAndBranch)                          \
   V(IsSmiAndBranch)                             \
   V(IsUndetectableAndBranch)                    \
@@ -156,7 +156,6 @@ class LCodeGen;
   V(ThisFunction)                               \
   V(Throw)                                      \
   V(ToFastProperties)                           \
-  V(TransitionElementsKind)                     \
   V(Typeof)                                     \
   V(TypeofIsAndBranch)                          \
   V(UnaryMathOperation)                         \
@@ -616,18 +615,17 @@ class LCmpConstantEqAndBranch: public LControlInstruction<1, 0> {
 };
 
 
-class LIsNilAndBranch: public LControlInstruction<1, 1> {
+class LIsNullAndBranch: public LControlInstruction<1, 1> {
  public:
-  LIsNilAndBranch(LOperand* value, LOperand* temp) {
+  LIsNullAndBranch(LOperand* value, LOperand* temp) {
     inputs_[0] = value;
     temps_[0] = temp;
   }
 
-  DECLARE_CONCRETE_INSTRUCTION(IsNilAndBranch, "is-nil-and-branch")
-  DECLARE_HYDROGEN_ACCESSOR(IsNilAndBranch)
+  DECLARE_CONCRETE_INSTRUCTION(IsNullAndBranch, "is-null-and-branch")
+  DECLARE_HYDROGEN_ACCESSOR(IsNullAndBranch)
 
-  EqualityKind kind() const { return hydrogen()->kind(); }
-  NilValue nil() const { return hydrogen()->nil(); }
+  bool is_strict() const { return hydrogen()->is_strict(); }
 
   virtual void PrintDataTo(StringStream* stream);
 };
@@ -1232,12 +1230,10 @@ class LLoadGlobalGeneric: public LTemplateInstruction<1, 2, 0> {
 };
 
 
-class LStoreGlobalCell: public LTemplateInstruction<0, 1, 2> {
+class LStoreGlobalCell: public LTemplateInstruction<0, 1, 0> {
  public:
-  explicit LStoreGlobalCell(LOperand* value, LOperand* temp1, LOperand* temp2) {
+  explicit LStoreGlobalCell(LOperand* value) {
     inputs_[0] = value;
-    temps_[0] = temp1;
-    temps_[1] = temp2;
   }
 
   DECLARE_CONCRETE_INSTRUCTION(StoreGlobalCell, "store-global-cell")
@@ -1296,6 +1292,7 @@ class LStoreContextSlot: public LTemplateInstruction<0, 2, 1> {
   LOperand* context() { return InputAt(0); }
   LOperand* value() { return InputAt(1); }
   int slot_index() { return hydrogen()->slot_index(); }
+  int needs_write_barrier() { return hydrogen()->NeedsWriteBarrier(); }
 
   virtual void PrintDataTo(StringStream* stream);
 };
@@ -1312,9 +1309,7 @@ class LPushArgument: public LTemplateInstruction<0, 1, 0> {
 
 
 class LThisFunction: public LTemplateInstruction<1, 0, 0> {
- public:
   DECLARE_CONCRETE_INSTRUCTION(ThisFunction, "this-function")
-  DECLARE_HYDROGEN_ACCESSOR(ThisFunction)
 };
 
 
@@ -1619,6 +1614,7 @@ class LStoreNamedField: public LTemplateInstruction<0, 2, 1> {
   Handle<Object> name() const { return hydrogen()->name(); }
   bool is_in_object() { return hydrogen()->is_in_object(); }
   int offset() { return hydrogen()->offset(); }
+  bool needs_write_barrier() { return hydrogen()->NeedsWriteBarrier(); }
   Handle<Map> transition() const { return hydrogen()->transition(); }
 };
 
@@ -1640,8 +1636,7 @@ class LStoreNamedGeneric: public LTemplateInstruction<0, 3, 0> {
   LOperand* object() { return inputs_[1]; }
   LOperand* value() { return inputs_[2]; }
   Handle<Object> name() const { return hydrogen()->name(); }
-  StrictModeFlag strict_mode_flag() { return hydrogen()->strict_mode_flag(); }
-  bool strict_mode() { return strict_mode_flag() == kStrictMode; }
+  bool strict_mode() { return hydrogen()->strict_mode(); }
 };
 
 
@@ -1735,30 +1730,6 @@ class LStoreKeyedGeneric: public LTemplateInstruction<0, 4, 0> {
 };
 
 
-class LTransitionElementsKind: public LTemplateInstruction<1, 1, 2> {
- public:
-  LTransitionElementsKind(LOperand* object,
-                          LOperand* new_map_temp,
-                          LOperand* temp_reg) {
-    inputs_[0] = object;
-    temps_[0] = new_map_temp;
-    temps_[1] = temp_reg;
-  }
-
-  DECLARE_CONCRETE_INSTRUCTION(TransitionElementsKind,
-                               "transition-elements-kind")
-  DECLARE_HYDROGEN_ACCESSOR(TransitionElementsKind)
-
-  virtual void PrintDataTo(StringStream* stream);
-
-  LOperand* object() { return inputs_[0]; }
-  LOperand* new_map_reg() { return temps_[0]; }
-  LOperand* temp_reg() { return temps_[1]; }
-  Handle<Map> original_map() { return hydrogen()->original_map(); }
-  Handle<Map> transitioned_map() { return hydrogen()->transitioned_map(); }
-};
-
-
 class LStringAdd: public LTemplateInstruction<1, 3, 0> {
  public:
   LStringAdd(LOperand* context, LOperand* left, LOperand* right) {
@@ -1826,8 +1797,6 @@ class LCheckFunction: public LTemplateInstruction<0, 1, 0> {
   explicit LCheckFunction(LOperand* value) {
     inputs_[0] = value;
   }
-
-  LOperand* value() { return inputs_[0]; }
 
   DECLARE_CONCRETE_INSTRUCTION(CheckFunction, "check-function")
   DECLARE_HYDROGEN_ACCESSOR(CheckFunction)
@@ -2101,7 +2070,6 @@ class LChunk: public ZoneObject {
       graph_(graph),
       instructions_(32),
       pointer_maps_(8),
-      num_double_slots_(0),
       inlined_closures_(1) { }
 
   void AddInstruction(LInstruction* instruction, HBasicBlock* block);
@@ -2115,8 +2083,6 @@ class LChunk: public ZoneObject {
   int ParameterAt(int index);
   int GetParameterStackSlot(int index) const;
   int spill_slot_count() const { return spill_slot_count_; }
-  int num_double_slots() const { return num_double_slots_; }
-
   CompilationInfo* info() const { return info_; }
   HGraph* graph() const { return graph_; }
   const ZoneList<LInstruction*>* instructions() const { return &instructions_; }
@@ -2158,7 +2124,6 @@ class LChunk: public ZoneObject {
   HGraph* const graph_;
   ZoneList<LInstruction*> instructions_;
   ZoneList<LPointerMap*> pointer_maps_;
-  int num_double_slots_;
   ZoneList<Handle<JSFunction> > inlined_closures_;
 };
 
@@ -2294,8 +2259,7 @@ class LChunkBuilder BASE_EMBEDDED {
       LInstruction* instr, int ast_id);
   void ClearInstructionPendingDeoptimizationEnvironment();
 
-  LEnvironment* CreateEnvironment(HEnvironment* hydrogen_env,
-                                  int* argument_index_accumulator);
+  LEnvironment* CreateEnvironment(HEnvironment* hydrogen_env);
 
   void VisitInstruction(HInstruction* current);
 

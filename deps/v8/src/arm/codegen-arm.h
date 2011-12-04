@@ -29,6 +29,7 @@
 #define V8_ARM_CODEGEN_ARM_H_
 
 #include "ast.h"
+#include "code-stubs-arm.h"
 #include "ic-inl.h"
 
 namespace v8 {
@@ -67,6 +68,16 @@ class CodeGenerator: public AstVisitor {
   static bool RecordPositions(MacroAssembler* masm,
                               int pos,
                               bool right_here = false);
+
+  // Constants related to patching of inlined load/store.
+  static int GetInlinedKeyedLoadInstructionsAfterPatch() {
+    return FLAG_debug_code ? 32 : 13;
+  }
+  static const int kInlinedKeyedStoreInstructionsAfterPatch = 8;
+  static int GetInlinedNamedStoreInstructionsAfterPatch() {
+    ASSERT(Isolate::Current()->inlined_write_barrier_size() != -1);
+    return Isolate::Current()->inlined_write_barrier_size() + 4;
+  }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CodeGenerator);

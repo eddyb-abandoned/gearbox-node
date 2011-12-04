@@ -3,10 +3,17 @@
     'conditions': [
       ['OS != "win"', {
         'defines': [
-          '_LARGEFILE_SOURCE',
-          '_FILE_OFFSET_BITS=64',
           '_GNU_SOURCE',
           'EIO_STACKSIZE=262144'
+        ],
+        'conditions': [
+          ['OS=="solaris"', {
+            'cflags': ['-pthreads'],
+            'ldlags': ['-pthreads'],
+          }, {
+            'cflags': ['-pthread'],
+            'ldlags': ['-pthread'],
+          }],
         ],
       }],
     ],
@@ -29,6 +36,7 @@
         'HAVE_CONFIG_H'
       ],
       'sources': [
+        'common.gypi',
         'include/ares.h',
         'include/ares_version.h',
         'include/uv.h',
@@ -120,6 +128,7 @@
             'src/win/async.c',
             'src/win/cares.c',
             'src/win/core.c',
+            'src/win/dl.c',
             'src/win/error.c',
             'src/win/fs.c',
             'src/win/fs-event.c',
@@ -128,13 +137,13 @@
             'src/win/internal.h',
             'src/win/loop-watcher.c',
             'src/win/pipe.c',
+            'src/win/thread.c',
             'src/win/process.c',
             'src/win/req.c',
             'src/win/stream.c',
             'src/win/tcp.c',
             'src/win/tty.c',
             'src/win/threadpool.c',
-            'src/win/threads.c',
             'src/win/timer.c',
             'src/win/udp.c',
             'src/win/util.c',
@@ -172,7 +181,9 @@
             'src/unix/tty.c',
             'src/unix/stream.c',
             'src/unix/cares.c',
+            'src/unix/dl.c',
             'src/unix/error.c',
+            'src/unix/thread.c',
             'src/unix/process.c',
             'src/unix/internal.h',
             'src/unix/eio/ecb.h',
@@ -266,6 +277,7 @@
         'test/test-error.c',
         'test/test-callback-stack.c',
         'test/test-connection-fail.c',
+        'test/test-cwd-and-chdir.c',
         'test/test-delayed-accept.c',
         'test/test-fail-always.c',
         'test/test-fs.c',
@@ -280,9 +292,11 @@
         'test/test-ipc.c',
         'test/test-list.h',
         'test/test-loop-handles.c',
+        'test/test-multiple-listen.c',
         'test/test-pass-always.c',
         'test/test-ping-pong.c',
         'test/test-pipe-bind-error.c',
+        'test/test-pipe-connect-error.c',
         'test/test-ref.c',
         'test/test-shutdown-eof.c',
         'test/test-spawn.c',
@@ -294,8 +308,10 @@
         'test/test-tcp-connect-error.c',
         'test/test-tcp-connect6-error.c',
         'test/test-tcp-write-error.c',
+        'test/test-tcp-write-to-half-open-connection.c',
         'test/test-tcp-writealot.c',
         'test/test-threadpool.c',
+        'test/test-mutexes.c',
         'test/test-timer-again.c',
         'test/test-timer.c',
         'test/test-tty.c',
@@ -313,11 +329,10 @@
           'libraries': [ 'ws2_32.lib' ]
         }, { # POSIX
           'defines': [ '_GNU_SOURCE' ],
-          'ldflags': [ '-pthread' ],
           'sources': [
             'test/runner-unix.c',
             'test/runner-unix.h',
-          ]
+          ],
         }],
         [ 'OS=="solaris"', { # make test-fs.c compile, needs _POSIX_C_SOURCE
           'defines': [
@@ -365,7 +380,6 @@
           'libraries': [ 'ws2_32.lib' ]
         }, { # POSIX
           'defines': [ '_GNU_SOURCE' ],
-          'ldflags': [ '-pthread' ],
           'sources': [
             'test/runner-unix.c',
             'test/runner-unix.h',

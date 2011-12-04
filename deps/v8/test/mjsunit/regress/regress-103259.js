@@ -25,14 +25,12 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// string.split needs to evaluate the separator's toString even if limit
-// is 0 because toString may have side effects.
+// Flags: --allow-natives-syntax
 
-var side_effect = false;
-var separator = new Object();
-separator.toString = function() {
-  side_effect = true;
-  return undefined;
-}
-'subject'.split(separator, 0);
-assertTrue(side_effect);
+var a = [];
+a[8192] = '';
+assertTrue(%HasDictionaryElements(a));
+var uc16 = '\u0094';
+var test = uc16;
+for (var i = 0; i < 13; i++) test += test;
+assertEquals(test, a.join(uc16));

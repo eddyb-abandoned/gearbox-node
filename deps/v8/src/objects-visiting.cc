@@ -73,9 +73,6 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
     case BYTE_ARRAY_TYPE:
       return kVisitByteArray;
 
-    case FREE_SPACE_TYPE:
-      return kVisitFreeSpace;
-
     case FIXED_ARRAY_TYPE:
       return kVisitFixedArray;
 
@@ -93,16 +90,6 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
 
     case JS_GLOBAL_PROPERTY_CELL_TYPE:
       return kVisitPropertyCell;
-
-    case JS_SET_TYPE:
-      return GetVisitorIdForSize(kVisitStruct,
-                                 kVisitStructGeneric,
-                                 JSSet::kSize);
-
-    case JS_MAP_TYPE:
-      return GetVisitorIdForSize(kVisitStruct,
-                                 kVisitStructGeneric,
-                                 JSMap::kSize);
 
     case JS_WEAK_MAP_TYPE:
       return kVisitJSWeakMap;

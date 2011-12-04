@@ -58,7 +58,6 @@ class LCodeGen BASE_EMBEDDED {
         inlined_function_count_(0),
         scope_(info->scope()),
         status_(UNUSED),
-        dynamic_frame_alignment_(false),
         deferred_(8),
         osr_pc_offset_(-1),
         deoptimization_reloc_size(),
@@ -131,12 +130,8 @@ class LCodeGen BASE_EMBEDDED {
   bool is_done() const { return status_ == DONE; }
   bool is_aborted() const { return status_ == ABORTED; }
 
-  StrictModeFlag strict_mode_flag() const {
-    return info()->strict_mode_flag();
-  }
-  bool dynamic_frame_alignment() const { return dynamic_frame_alignment_; }
-  void set_dynamic_frame_alignment(bool value) {
-    dynamic_frame_alignment_ = value;
+  int strict_mode_flag() const {
+    return info()->is_strict_mode() ? kStrictMode : kNonStrictMode;
   }
 
   LChunk* chunk() const { return chunk_; }
@@ -227,7 +222,6 @@ class LCodeGen BASE_EMBEDDED {
   Register ToRegister(int index) const;
   XMMRegister ToDoubleRegister(int index) const;
   int ToInteger32(LConstantOperand* op) const;
-  double ToDouble(LConstantOperand* op) const;
   Operand BuildFastArrayOperand(LOperand* elements_pointer,
                                 LOperand* key,
                                 ElementsKind elements_kind,
@@ -262,6 +256,7 @@ class LCodeGen BASE_EMBEDDED {
   static Condition TokenToCondition(Token::Value op, bool is_unsigned);
   void EmitGoto(int block);
   void EmitBranch(int left_block, int right_block, Condition cc);
+  void EmitCmpI(LOperand* left, LOperand* right);
   void EmitNumberUntagD(Register input,
                         XMMRegister result,
                         bool deoptimize_on_undefined,
@@ -270,10 +265,8 @@ class LCodeGen BASE_EMBEDDED {
   // Emits optimized code for typeof x == "y".  Modifies input register.
   // Returns the condition on which a final split to
   // true and false label should be made, to optimize fallthrough.
-  Condition EmitTypeofIs(Label* true_label,
-                         Label* false_label,
-                         Register input,
-                         Handle<String> type_name);
+  Condition EmitTypeofIs(Label* true_label, Label* false_label,
+                         Register input, Handle<String> type_name);
 
   // Emits optimized code for %_IsObject(x).  Preserves input register.
   // Returns the condition on which a final split to
@@ -304,7 +297,6 @@ class LCodeGen BASE_EMBEDDED {
   int inlined_function_count_;
   Scope* const scope_;
   Status status_;
-  bool dynamic_frame_alignment_;
   TranslationBuffer translations_;
   ZoneList<LDeferredCode*> deferred_;
   int osr_pc_offset_;
@@ -354,20 +346,16 @@ class LCodeGen BASE_EMBEDDED {
 class LDeferredCode: public ZoneObject {
  public:
   explicit LDeferredCode(LCodeGen* codegen)
-      : codegen_(codegen),
-        external_exit_(NULL),
-        instruction_index_(codegen->current_instruction_) {
+      : codegen_(codegen), external_exit_(NULL) {
     codegen->AddDeferredCode(this);
   }
 
   virtual ~LDeferredCode() { }
   virtual void Generate() = 0;
-  virtual LInstruction* instr() = 0;
 
   void SetExit(Label *exit) { external_exit_ = exit; }
   Label* entry() { return &entry_; }
   Label* exit() { return external_exit_ != NULL ? external_exit_ : &exit_; }
-  int instruction_index() const { return instruction_index_; }
 
  protected:
   LCodeGen* codegen() const { return codegen_; }
@@ -378,7 +366,6 @@ class LDeferredCode: public ZoneObject {
   Label entry_;
   Label exit_;
   Label* external_exit_;
-  int instruction_index_;
 };
 
 } }  // namespace v8::internal

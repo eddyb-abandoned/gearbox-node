@@ -94,9 +94,6 @@ void HeapObject::HeapObjectVerify() {
     case BYTE_ARRAY_TYPE:
       ByteArray::cast(this)->ByteArrayVerify();
       break;
-    case FREE_SPACE_TYPE:
-      FreeSpace::cast(this)->FreeSpaceVerify();
-      break;
     case EXTERNAL_PIXEL_ARRAY_TYPE:
       ExternalPixelArray::cast(this)->ExternalPixelArrayVerify();
       break;
@@ -156,12 +153,6 @@ void HeapObject::HeapObjectVerify() {
     case JS_ARRAY_TYPE:
       JSArray::cast(this)->JSArrayVerify();
       break;
-    case JS_SET_TYPE:
-      JSSet::cast(this)->JSSetVerify();
-      break;
-    case JS_MAP_TYPE:
-      JSMap::cast(this)->JSMapVerify();
-      break;
     case JS_WEAK_MAP_TYPE:
       JSWeakMap::cast(this)->JSWeakMapVerify();
       break;
@@ -216,11 +207,6 @@ void ByteArray::ByteArrayVerify() {
 }
 
 
-void FreeSpace::FreeSpaceVerify() {
-  ASSERT(IsFreeSpace());
-}
-
-
 void ExternalPixelArray::ExternalPixelArrayVerify() {
   ASSERT(IsExternalPixelArray());
 }
@@ -269,18 +255,12 @@ void ExternalDoubleArray::ExternalDoubleArrayVerify() {
 void JSObject::JSObjectVerify() {
   VerifyHeapPointer(properties());
   VerifyHeapPointer(elements());
-
-  if (GetElementsKind() == NON_STRICT_ARGUMENTS_ELEMENTS) {
-    ASSERT(this->elements()->IsFixedArray());
-    ASSERT(this->elements()->length() >= 2);
-  }
-
   if (HasFastProperties()) {
     CHECK_EQ(map()->unused_property_fields(),
              (map()->inobject_properties() + properties()->length() -
               map()->NextFreePropertyIndex()));
   }
-  ASSERT_EQ((map()->has_fast_elements() || map()->has_fast_smi_only_elements()),
+  ASSERT_EQ(map()->has_fast_elements(),
             (elements()->map() == GetHeap()->fixed_array_map() ||
              elements()->map() == GetHeap()->fixed_cow_array_map()));
   ASSERT(map()->has_fast_elements() == HasFastElements());
@@ -342,8 +322,7 @@ void FixedDoubleArray::FixedDoubleArrayVerify() {
       double value = get_scalar(i);
       ASSERT(!isnan(value) ||
              (BitCast<uint64_t>(value) ==
-              BitCast<uint64_t>(canonical_not_the_hole_nan_as_double())) ||
-             ((BitCast<uint64_t>(value) & Double::kSignMask) != 0));
+              BitCast<uint64_t>(canonical_not_the_hole_nan_as_double())));
     }
   }
 }
@@ -408,7 +387,6 @@ void JSFunction::JSFunctionVerify() {
   CHECK(IsJSFunction());
   VerifyObjectField(kPrototypeOrInitialMapOffset);
   VerifyObjectField(kNextFunctionLinkOffset);
-  CHECK(code()->IsCode());
   CHECK(next_function_link()->IsUndefined() ||
         next_function_link()->IsJSFunction());
 }
@@ -468,8 +446,9 @@ void Oddball::OddballVerify() {
   } else {
     ASSERT(number->IsSmi());
     int value = Smi::cast(number)->value();
-    ASSERT(value <= 1);
     // Hidden oddballs have negative smis.
+    const int kLeastHiddenOddballNumber = -4;
+    ASSERT(value <= 1);
     ASSERT(value >= kLeastHiddenOddballNumber);
   }
 }
@@ -484,7 +463,6 @@ void JSGlobalPropertyCell::JSGlobalPropertyCellVerify() {
 void Code::CodeVerify() {
   CHECK(IsAligned(reinterpret_cast<intptr_t>(instruction_start()),
                   kCodeAlignment));
-  relocation_info()->Verify();
   Address last_gc_pc = NULL;
   for (RelocIterator it(this); !it.done(); it.next()) {
     it.rinfo()->Verify();
@@ -506,27 +484,11 @@ void JSArray::JSArrayVerify() {
 }
 
 
-void JSSet::JSSetVerify() {
-  CHECK(IsJSSet());
-  JSObjectVerify();
-  VerifyHeapPointer(table());
-  ASSERT(table()->IsHashTable() || table()->IsUndefined());
-}
-
-
-void JSMap::JSMapVerify() {
-  CHECK(IsJSMap());
-  JSObjectVerify();
-  VerifyHeapPointer(table());
-  ASSERT(table()->IsHashTable() || table()->IsUndefined());
-}
-
-
 void JSWeakMap::JSWeakMapVerify() {
   CHECK(IsJSWeakMap());
   JSObjectVerify();
   VerifyHeapPointer(table());
-  ASSERT(table()->IsHashTable() || table()->IsUndefined());
+  ASSERT(table()->IsHashTable());
 }
 
 
@@ -573,14 +535,13 @@ void JSRegExp::JSRegExpVerify() {
 
 
 void JSProxy::JSProxyVerify() {
-  CHECK(IsJSProxy());
+  ASSERT(IsJSProxy());
   VerifyPointer(handler());
-  ASSERT(hash()->IsSmi() || hash()->IsUndefined());
 }
 
 
 void JSFunctionProxy::JSFunctionProxyVerify() {
-  CHECK(IsJSFunctionProxy());
+  ASSERT(IsJSFunctionProxy());
   JSProxyVerify();
   VerifyPointer(call_trap());
   VerifyPointer(construct_trap());

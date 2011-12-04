@@ -1268,9 +1268,9 @@ void Simulator::WriteDW(int32_t addr, int32_t value1, int32_t value2) {
 
 // Returns the limit of the stack area to enable checking for stack overflows.
 uintptr_t Simulator::StackLimit() const {
-  // Leave a safety margin of 512 bytes to prevent overrunning the stack when
+  // Leave a safety margin of 256 bytes to prevent overrunning the stack when
   // pushing values.
-  return reinterpret_cast<uintptr_t>(stack_) + 512;
+  return reinterpret_cast<uintptr_t>(stack_) + 256;
 }
 
 
@@ -1618,8 +1618,6 @@ void Simulator::HandleRList(Instruction* instr, bool load) {
   ProcessPUW(instr, num_regs, kPointerSize, &start_address, &end_address);
 
   intptr_t* address = reinterpret_cast<intptr_t*>(start_address);
-  // Catch null pointers a little earlier.
-  ASSERT(start_address > 8191 || start_address < 0);
   int reg = 0;
   while (rlist != 0) {
     if ((rlist & 1) != 0) {

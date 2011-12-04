@@ -107,7 +107,7 @@ class LCodeGen;
   V(Integer32ToDouble)                          \
   V(InvokeFunction)                             \
   V(IsConstructCallAndBranch)                   \
-  V(IsNilAndBranch)                             \
+  V(IsNullAndBranch)                            \
   V(IsObjectAndBranch)                          \
   V(IsSmiAndBranch)                             \
   V(IsUndetectableAndBranch)                    \
@@ -162,7 +162,6 @@ class LCodeGen;
   V(ThisFunction)                               \
   V(Throw)                                      \
   V(ToFastProperties)                           \
-  V(TransitionElementsKind)                     \
   V(Typeof)                                     \
   V(TypeofIsAndBranch)                          \
   V(UnaryMathOperation)                         \
@@ -628,17 +627,16 @@ class LCmpConstantEqAndBranch: public LControlInstruction<1, 0> {
 };
 
 
-class LIsNilAndBranch: public LControlInstruction<1, 0> {
+class LIsNullAndBranch: public LControlInstruction<1, 0> {
  public:
-  explicit LIsNilAndBranch(LOperand* value) {
+  explicit LIsNullAndBranch(LOperand* value) {
     inputs_[0] = value;
   }
 
-  DECLARE_CONCRETE_INSTRUCTION(IsNilAndBranch, "is-nil-and-branch")
-  DECLARE_HYDROGEN_ACCESSOR(IsNilAndBranch)
+  DECLARE_CONCRETE_INSTRUCTION(IsNullAndBranch, "is-null-and-branch")
+  DECLARE_HYDROGEN_ACCESSOR(IsNullAndBranch)
 
-  EqualityKind kind() const { return hydrogen()->kind(); }
-  NilValue nil() const { return hydrogen()->nil(); }
+  bool is_strict() const { return hydrogen()->is_strict(); }
 
   virtual void PrintDataTo(StringStream* stream);
 };
@@ -1261,6 +1259,7 @@ class LStoreContextSlot: public LTemplateInstruction<0, 2, 0> {
   LOperand* context() { return InputAt(0); }
   LOperand* value() { return InputAt(1); }
   int slot_index() { return hydrogen()->slot_index(); }
+  int needs_write_barrier() { return hydrogen()->NeedsWriteBarrier(); }
 
   virtual void PrintDataTo(StringStream* stream);
 };
@@ -1277,9 +1276,7 @@ class LPushArgument: public LTemplateInstruction<0, 1, 0> {
 
 
 class LThisFunction: public LTemplateInstruction<1, 0, 0> {
- public:
   DECLARE_CONCRETE_INSTRUCTION(ThisFunction, "this-function")
-  DECLARE_HYDROGEN_ACCESSOR(ThisFunction)
 };
 
 
@@ -1563,6 +1560,7 @@ class LStoreNamedField: public LTemplateInstruction<0, 2, 0> {
   Handle<Object> name() const { return hydrogen()->name(); }
   bool is_in_object() { return hydrogen()->is_in_object(); }
   int offset() { return hydrogen()->offset(); }
+  bool needs_write_barrier() { return hydrogen()->NeedsWriteBarrier(); }
   Handle<Map> transition() const { return hydrogen()->transition(); }
 };
 
@@ -1582,8 +1580,7 @@ class LStoreNamedGeneric: public LTemplateInstruction<0, 2, 0> {
   LOperand* object() { return inputs_[0]; }
   LOperand* value() { return inputs_[1]; }
   Handle<Object> name() const { return hydrogen()->name(); }
-  StrictModeFlag strict_mode_flag() { return hydrogen()->strict_mode_flag(); }
-  bool strict_mode() { return strict_mode_flag() == kStrictMode; }
+  bool strict_mode() { return hydrogen()->strict_mode(); }
 };
 
 
@@ -1668,30 +1665,6 @@ class LStoreKeyedSpecializedArrayElement: public LTemplateInstruction<0, 3, 0> {
   ElementsKind elements_kind() const {
     return hydrogen()->elements_kind();
   }
-};
-
-
-class LTransitionElementsKind: public LTemplateInstruction<1, 1, 2> {
- public:
-  LTransitionElementsKind(LOperand* object,
-                          LOperand* new_map_temp,
-                          LOperand* temp_reg) {
-    inputs_[0] = object;
-    temps_[0] = new_map_temp;
-    temps_[1] = temp_reg;
-  }
-
-  DECLARE_CONCRETE_INSTRUCTION(TransitionElementsKind,
-                               "transition-elements-kind")
-  DECLARE_HYDROGEN_ACCESSOR(TransitionElementsKind)
-
-  virtual void PrintDataTo(StringStream* stream);
-
-  LOperand* object() { return inputs_[0]; }
-  LOperand* new_map_reg() { return temps_[0]; }
-  LOperand* temp_reg() { return temps_[1]; }
-  Handle<Map> original_map() { return hydrogen()->original_map(); }
-  Handle<Map> transitioned_map() { return hydrogen()->transitioned_map(); }
 };
 
 
@@ -2186,8 +2159,7 @@ class LChunkBuilder BASE_EMBEDDED {
       LInstruction* instr, int ast_id);
   void ClearInstructionPendingDeoptimizationEnvironment();
 
-  LEnvironment* CreateEnvironment(HEnvironment* hydrogen_env,
-                                  int* argument_index_accumulator);
+  LEnvironment* CreateEnvironment(HEnvironment* hydrogen_env);
 
   void VisitInstruction(HInstruction* current);
 

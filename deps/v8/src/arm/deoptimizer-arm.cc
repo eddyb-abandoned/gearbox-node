@@ -100,6 +100,7 @@ void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
     }
   }
 
+
 #ifdef DEBUG
   // Destroy the code which is not supposed to be run again.
   int instructions =
@@ -111,18 +112,11 @@ void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
   }
 #endif
 
-  Isolate* isolate = code->GetIsolate();
-
   // Add the deoptimizing code to the list.
   DeoptimizingCodeListNode* node = new DeoptimizingCodeListNode(code);
-  DeoptimizerData* data = isolate->deoptimizer_data();
+  DeoptimizerData* data = code->GetIsolate()->deoptimizer_data();
   node->set_next(data->deoptimizing_code_list_);
   data->deoptimizing_code_list_ = node;
-
-  // We might be in the middle of incremental marking with compaction.
-  // Tell collector to treat this code object in a special way and
-  // ignore all slots that might have been recorded on it.
-  isolate->heap()->mark_compact_collector()->InvalidateCode(code);
 
   // Set the code for the function to non-optimized version.
   function->ReplaceCode(function->shared()->code());
@@ -140,8 +134,7 @@ void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
 }
 
 
-void Deoptimizer::PatchStackCheckCodeAt(Code* unoptimized_code,
-                                        Address pc_after,
+void Deoptimizer::PatchStackCheckCodeAt(Address pc_after,
                                         Code* check_code,
                                         Code* replacement_code) {
   const int kInstrSize = Assembler::kInstrSize;
@@ -176,14 +169,10 @@ void Deoptimizer::PatchStackCheckCodeAt(Code* unoptimized_code,
          reinterpret_cast<uint32_t>(check_code->entry()));
   Memory::uint32_at(stack_check_address_pointer) =
       reinterpret_cast<uint32_t>(replacement_code->entry());
-
-  unoptimized_code->GetHeap()->incremental_marking()->RecordCodeTargetPatch(
-      unoptimized_code, pc_after - 2 * kInstrSize, replacement_code);
 }
 
 
-void Deoptimizer::RevertStackCheckCodeAt(Code* unoptimized_code,
-                                         Address pc_after,
+void Deoptimizer::RevertStackCheckCodeAt(Address pc_after,
                                          Code* check_code,
                                          Code* replacement_code) {
   const int kInstrSize = Assembler::kInstrSize;
@@ -204,9 +193,6 @@ void Deoptimizer::RevertStackCheckCodeAt(Code* unoptimized_code,
          reinterpret_cast<uint32_t>(replacement_code->entry()));
   Memory::uint32_at(stack_check_address_pointer) =
       reinterpret_cast<uint32_t>(check_code->entry());
-
-  check_code->GetHeap()->incremental_marking()->RecordCodeTargetPatch(
-      unoptimized_code, pc_after - 2 * kInstrSize, check_code);
 }
 
 
@@ -646,10 +632,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ mov(r5, Operand(ExternalReference::isolate_address()));
   __ str(r5, MemOperand(sp, 1 * kPointerSize));  // Isolate.
   // Call Deoptimizer::New().
-  {
-    AllowExternalCallThatCantCauseGC scope(masm());
-    __ CallCFunction(ExternalReference::new_deoptimizer_function(isolate), 6);
-  }
+  __ CallCFunction(ExternalReference::new_deoptimizer_function(isolate), 6);
 
   // Preserve "deoptimizer" object in register r0 and get the input
   // frame descriptor pointer to r1 (deoptimizer->input_);
@@ -703,11 +686,8 @@ void Deoptimizer::EntryGenerator::Generate() {
   // r0: deoptimizer object; r1: scratch.
   __ PrepareCallCFunction(1, r1);
   // Call Deoptimizer::ComputeOutputFrames().
-  {
-    AllowExternalCallThatCantCauseGC scope(masm());
-    __ CallCFunction(
-        ExternalReference::compute_output_frames_function(isolate), 1);
-  }
+  __ CallCFunction(
+      ExternalReference::compute_output_frames_function(isolate), 1);
   __ pop(r0);  // Restore deoptimizer object (class Deoptimizer).
 
   // Replace the current (input) frame with the output frames.
@@ -723,6 +703,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ ldr(r3, MemOperand(r2, FrameDescription::frame_size_offset()));
   __ bind(&inner_push_loop);
   __ sub(r3, r3, Operand(sizeof(uint32_t)));
+  // __ add(r6, r2, Operand(r3, LSL, 1));
   __ add(r6, r2, Operand(r3));
   __ ldr(r7, MemOperand(r6, FrameDescription::frame_content_offset()));
   __ push(r7);
@@ -756,9 +737,8 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ pop(ip);  // remove lr
 
   // Set up the roots register.
-  ExternalReference roots_array_start =
-      ExternalReference::roots_array_start(isolate);
-  __ mov(r10, Operand(roots_array_start));
+  ExternalReference roots_address = ExternalReference::roots_address(isolate);
+  __ mov(r10, Operand(roots_address));
 
   __ pop(ip);  // remove pc
   __ pop(r7);  // get continuation, leave pc on stack

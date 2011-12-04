@@ -212,11 +212,10 @@ void LCmpIDAndBranch::PrintDataTo(StringStream* stream) {
 }
 
 
-void LIsNilAndBranch::PrintDataTo(StringStream* stream) {
+void LIsNullAndBranch::PrintDataTo(StringStream* stream) {
   stream->Add("if ");
   InputAt(0)->PrintTo(stream);
-  stream->Add(kind() == kStrictEquality ? " === " : " == ");
-  stream->Add(nil() == kNullValue ? "null" : "undefined");
+  stream->Add(is_strict() ? " === null" : " == null");
   stream->Add(" then B%d else B%d", true_block_id(), false_block_id());
 }
 
@@ -388,12 +387,6 @@ void LStoreKeyedGeneric::PrintDataTo(StringStream* stream) {
   key()->PrintTo(stream);
   stream->Add("] <- ");
   value()->PrintTo(stream);
-}
-
-
-void LTransitionElementsKind::PrintDataTo(StringStream* stream) {
-  object()->PrintTo(stream);
-  stream->Add(" %p -> %p", *original_map(), *transitioned_map());
 }
 
 
@@ -718,9 +711,7 @@ LInstruction* LChunkBuilder::DefineFixedDouble(
 
 LInstruction* LChunkBuilder::AssignEnvironment(LInstruction* instr) {
   HEnvironment* hydrogen_env = current_block_->last_environment();
-  int argument_index_accumulator = 0;
-  instr->set_environment(CreateEnvironment(hydrogen_env,
-                                           &argument_index_accumulator));
+  instr->set_environment(CreateEnvironment(hydrogen_env));
   return instr;
 }
 
@@ -1003,13 +994,10 @@ void LChunkBuilder::VisitInstruction(HInstruction* current) {
 }
 
 
-LEnvironment* LChunkBuilder::CreateEnvironment(
-    HEnvironment* hydrogen_env,
-    int* argument_index_accumulator) {
+LEnvironment* LChunkBuilder::CreateEnvironment(HEnvironment* hydrogen_env) {
   if (hydrogen_env == NULL) return NULL;
 
-  LEnvironment* outer =
-      CreateEnvironment(hydrogen_env->outer(), argument_index_accumulator);
+  LEnvironment* outer = CreateEnvironment(hydrogen_env->outer());
   int ast_id = hydrogen_env->ast_id();
   ASSERT(ast_id != AstNode::kNoNumber);
   int value_count = hydrogen_env->length();
@@ -1019,6 +1007,7 @@ LEnvironment* LChunkBuilder::CreateEnvironment(
                                           argument_count_,
                                           value_count,
                                           outer);
+  int argument_index = 0;
   for (int i = 0; i < value_count; ++i) {
     if (hydrogen_env->is_special_index(i)) continue;
 
@@ -1027,7 +1016,7 @@ LEnvironment* LChunkBuilder::CreateEnvironment(
     if (value->IsArgumentsObject()) {
       op = NULL;
     } else if (value->IsPushArgument()) {
-      op = new LArgument((*argument_index_accumulator)++);
+      op = new LArgument(argument_index++);
     } else {
       op = UseAny(value);
     }
@@ -1410,10 +1399,12 @@ LInstruction* LChunkBuilder::DoPower(HPower* instr) {
 
 
 LInstruction* LChunkBuilder::DoCompareGeneric(HCompareGeneric* instr) {
+  Token::Value op = instr->token();
   ASSERT(instr->left()->representation().IsTagged());
   ASSERT(instr->right()->representation().IsTagged());
-  LOperand* left = UseFixed(instr->left(), r1);
-  LOperand* right = UseFixed(instr->right(), r0);
+  bool reversed = (op == Token::GT || op == Token::LTE);
+  LOperand* left = UseFixed(instr->left(), reversed ? r0 : r1);
+  LOperand* right = UseFixed(instr->right(), reversed ? r1 : r0);
   LCmpT* result = new LCmpT(left, right);
   return MarkAsCall(DefineFixed(result, r0), instr);
 }
@@ -1425,8 +1416,8 @@ LInstruction* LChunkBuilder::DoCompareIDAndBranch(
   if (r.IsInteger32()) {
     ASSERT(instr->left()->representation().IsInteger32());
     ASSERT(instr->right()->representation().IsInteger32());
-    LOperand* left = UseRegisterOrConstantAtStart(instr->left());
-    LOperand* right = UseRegisterOrConstantAtStart(instr->right());
+    LOperand* left = UseRegisterAtStart(instr->left());
+    LOperand* right = UseRegisterAtStart(instr->right());
     return new LCmpIDAndBranch(left, right);
   } else {
     ASSERT(r.IsDouble());
@@ -1453,9 +1444,9 @@ LInstruction* LChunkBuilder::DoCompareConstantEqAndBranch(
 }
 
 
-LInstruction* LChunkBuilder::DoIsNilAndBranch(HIsNilAndBranch* instr) {
+LInstruction* LChunkBuilder::DoIsNullAndBranch(HIsNullAndBranch* instr) {
   ASSERT(instr->value()->representation().IsTagged());
-  return new LIsNilAndBranch(UseRegisterAtStart(instr->value()));
+  return new LIsNullAndBranch(UseRegisterAtStart(instr->value()));
 }
 
 
@@ -1743,7 +1734,7 @@ LInstruction* LChunkBuilder::DoConstant(HConstant* instr) {
 
 LInstruction* LChunkBuilder::DoLoadGlobalCell(HLoadGlobalCell* instr) {
   LLoadGlobalCell* result = new LLoadGlobalCell;
-  return instr->RequiresHoleCheck()
+  return instr->check_hole_value()
       ? AssignEnvironment(DefineAsRegister(result))
       : DefineAsRegister(result);
 }
@@ -1757,11 +1748,14 @@ LInstruction* LChunkBuilder::DoLoadGlobalGeneric(HLoadGlobalGeneric* instr) {
 
 
 LInstruction* LChunkBuilder::DoStoreGlobalCell(HStoreGlobalCell* instr) {
-  LOperand* temp = TempRegister();
-  LOperand* value = UseTempRegister(instr->value());
-  LInstruction* result = new LStoreGlobalCell(value, temp);
-  if (instr->RequiresHoleCheck()) result = AssignEnvironment(result);
-  return result;
+  if (instr->check_hole_value()) {
+    LOperand* temp = TempRegister();
+    LOperand* value = UseRegister(instr->value());
+    return AssignEnvironment(new LStoreGlobalCell(value, temp));
+  } else {
+    LOperand* value = UseRegisterAtStart(instr->value());
+    return new LStoreGlobalCell(value, NULL);
+  }
 }
 
 
@@ -1971,26 +1965,6 @@ LInstruction* LChunkBuilder::DoStoreKeyedGeneric(HStoreKeyedGeneric* instr) {
   ASSERT(instr->value()->representation().IsTagged());
 
   return MarkAsCall(new LStoreKeyedGeneric(obj, key, val), instr);
-}
-
-
-LInstruction* LChunkBuilder::DoTransitionElementsKind(
-    HTransitionElementsKind* instr) {
-  if (instr->original_map()->elements_kind() == FAST_SMI_ONLY_ELEMENTS &&
-      instr->transitioned_map()->elements_kind() == FAST_ELEMENTS) {
-    LOperand* object = UseRegister(instr->object());
-    LOperand* new_map_reg = TempRegister();
-    LTransitionElementsKind* result =
-        new LTransitionElementsKind(object, new_map_reg, NULL);
-    return DefineSameAsFirst(result);
-  } else {
-    LOperand* object = UseFixed(instr->object(), r0);
-    LOperand* fixed_object_reg = FixedTemp(r2);
-    LOperand* new_map_reg = FixedTemp(r3);
-    LTransitionElementsKind* result =
-        new LTransitionElementsKind(object, new_map_reg, fixed_object_reg);
-    return MarkAsCall(DefineFixed(result, r0), instr);
-  }
 }
 
 

@@ -340,8 +340,6 @@
             '../../src/ic-inl.h',
             '../../src/ic.cc',
             '../../src/ic.h',
-            '../../src/incremental-marking.cc',
-            '../../src/incremental-marking.h',
             '../../src/inspector.cc',
             '../../src/inspector.h',
             '../../src/interpreter-irregexp.cc',
@@ -433,9 +431,6 @@
             '../../src/spaces-inl.h',
             '../../src/spaces.cc',
             '../../src/spaces.h',
-            '../../src/store-buffer-inl.h',
-            '../../src/store-buffer.cc',
-            '../../src/store-buffer.h',
             '../../src/string-search.cc',
             '../../src/string-search.h',
             '../../src/string-stream.cc',
@@ -649,7 +644,7 @@
             ['OS=="solaris"', {
                 'sources': [
                   '../../src/platform-solaris.cc',
-                  '../../src/platform-posix.cc',
+                  '../../src/platform-posix.cc'
                 ],
               }
             ],
@@ -709,7 +704,7 @@
             'experimental_library_files': [
               '../../src/macros.py',
               '../../src/proxy.js',
-              '../../src/collection.js',
+              '../../src/weakmap.js',
             ],
           },
           'actions': [
@@ -870,7 +865,7 @@
       'targets': [
         {
           'target_name': 'v8',
-          'type': 'none',
+          'type': 'settings',
           'conditions': [
             ['want_separate_host_toolset==1', {
               'toolsets': ['host', 'target'],

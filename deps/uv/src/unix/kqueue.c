@@ -86,8 +86,12 @@ void uv__kqueue_hack(EV_P_ int fflags, ev_io *w) {
 int uv_fs_event_init(uv_loop_t* loop,
                      uv_fs_event_t* handle,
                      const char* filename,
-                     uv_fs_event_cb cb) {
+                     uv_fs_event_cb cb,
+                     int flags) {
   int fd;
+
+  /* We don't support any flags yet. */
+  assert(!flags);
 
   if (cb == NULL) {
     uv__set_sys_error(loop, EINVAL);
@@ -112,6 +116,7 @@ int uv_fs_event_init(uv_loop_t* loop,
 
 
 void uv__fs_event_destroy(uv_fs_event_t* handle) {
+  uv__fs_event_stop(handle);
   free(handle->filename);
   uv__close(handle->fd);
   handle->fd = -1;
@@ -122,7 +127,8 @@ void uv__fs_event_destroy(uv_fs_event_t* handle) {
 int uv_fs_event_init(uv_loop_t* loop,
                      uv_fs_event_t* handle,
                      const char* filename,
-                     uv_fs_event_cb cb) {
+                     uv_fs_event_cb cb,
+                     int flags) {
   uv__set_sys_error(loop, ENOSYS);
   return -1;
 }

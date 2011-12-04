@@ -33,7 +33,6 @@
 #include "preparse-data-format.h"
 #include "preparse-data.h"
 #include "scopes.h"
-#include "preparser.h"
 
 namespace v8 {
 namespace internal {
@@ -44,7 +43,6 @@ class ParserLog;
 class PositionStack;
 class Target;
 class LexicalScope;
-class SaveScope;
 
 template <typename T> class ZoneListWrapper;
 
@@ -166,13 +164,13 @@ class ParserApi {
   // Generic preparser generating full preparse data.
   static ScriptDataImpl* PreParse(UC16CharacterStream* source,
                                   v8::Extension* extension,
-                                  int flags);
+                                  bool harmony_block_scoping);
 
   // Preparser that only does preprocessing that makes sense if only used
   // immediately after.
   static ScriptDataImpl* PartialPreParse(UC16CharacterStream* source,
                                          v8::Extension* extension,
-                                         int flags);
+                                         bool harmony_block_scoping);
 };
 
 // ----------------------------------------------------------------------------
@@ -438,7 +436,7 @@ class Parser {
   void ReportMessageAt(Scanner::Location loc,
                        const char* message,
                        Vector<Handle<String> > args);
-  void SetHarmonyScoping(bool block_scoping);
+  void SetHarmonyBlockScoping(bool block_scoping);
 
  private:
   // Limit on number of function parameters is chosen arbitrarily.
@@ -461,12 +459,6 @@ class Parser {
     kForStatement
   };
 
-  // If a list of variable declarations includes any initializers.
-  enum VariableDeclarationProperties {
-    kHasInitializers,
-    kHasNoInitializers
-  };
-
   Isolate* isolate() { return isolate_; }
   Zone* zone() { return isolate_->zone(); }
 
@@ -481,7 +473,7 @@ class Parser {
   void ReportInvalidPreparseData(Handle<String> name, bool* ok);
   void ReportMessage(const char* message, Vector<const char*> args);
 
-  bool inside_with() const { return top_scope_->inside_with(); }
+  bool inside_with() const { return with_nesting_level_ > 0; }
   JavaScriptScanner& scanner()  { return scanner_; }
   Mode mode() const { return mode_; }
   ScriptDataImpl* pre_data() const { return pre_data_; }
@@ -500,10 +492,10 @@ class Parser {
   Statement* ParseFunctionDeclaration(bool* ok);
   Statement* ParseNativeDeclaration(bool* ok);
   Block* ParseBlock(ZoneStringList* labels, bool* ok);
+  Block* ParseScopedBlock(ZoneStringList* labels, bool* ok);
   Block* ParseVariableStatement(VariableDeclarationContext var_context,
                                 bool* ok);
   Block* ParseVariableDeclarations(VariableDeclarationContext var_context,
-                                   VariableDeclarationProperties* decl_props,
                                    Handle<String>* out,
                                    bool* ok);
   Statement* ParseExpressionOrLabelledStatement(ZoneStringList* labels,
@@ -523,9 +515,6 @@ class Parser {
   TryStatement* ParseTryStatement(bool* ok);
   DebuggerStatement* ParseDebuggerStatement(bool* ok);
 
-  // Support for hamony block scoped bindings.
-  Block* ParseScopedBlock(ZoneStringList* labels, bool* ok);
-
   Expression* ParseExpression(bool accept_IN, bool* ok);
   Expression* ParseAssignmentExpression(bool accept_IN, bool* ok);
   Expression* ParseConditionalExpression(bool accept_IN, bool* ok);
@@ -543,6 +532,11 @@ class Parser {
   Expression* ParseObjectLiteral(bool* ok);
   ObjectLiteral::Property* ParseObjectLiteralGetSet(bool is_getter, bool* ok);
   Expression* ParseRegExpLiteral(bool seen_equal, bool* ok);
+
+  Expression* NewCompareNode(Token::Value op,
+                             Expression* x,
+                             Expression* y,
+                             int position);
 
   // Populate the constant properties fixed array for a materialized object
   // literal.
@@ -662,7 +656,7 @@ class Parser {
   void CheckConflictingVarDeclarations(Scope* scope, bool* ok);
 
   // Parser support
-  VariableProxy* Declare(Handle<String> name, VariableMode mode,
+  VariableProxy* Declare(Handle<String> name, Variable::Mode mode,
                          FunctionLiteral* fun,
                          bool resolve,
                          bool* ok);
@@ -680,7 +674,7 @@ class Parser {
     return &empty;
   }
 
-  Scope* NewScope(Scope* parent, ScopeType type);
+  Scope* NewScope(Scope* parent, Scope::Type type, bool inside_with);
 
   Handle<String> LookupSymbol(int symbol_id);
 
@@ -725,6 +719,7 @@ class Parser {
   JavaScriptScanner scanner_;
 
   Scope* top_scope_;
+  int with_nesting_level_;
 
   LexicalScope* lexical_scope_;
   Mode mode_;
@@ -741,10 +736,9 @@ class Parser {
   // Heuristically that means that the function will be called immediately,
   // so never lazily compile it.
   bool parenthesized_function_;
-  bool harmony_scoping_;
+  bool harmony_block_scoping_;
 
   friend class LexicalScope;
-  friend class SaveScope;
 };
 
 

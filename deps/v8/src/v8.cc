@@ -38,7 +38,6 @@
 #include "log.h"
 #include "runtime-profiler.h"
 #include "serialize.h"
-#include "store-buffer.h"
 
 namespace v8 {
 namespace internal {
@@ -57,15 +56,6 @@ static EntropySource entropy_source;
 
 
 bool V8::Initialize(Deserializer* des) {
-  // Setting --harmony implies all other harmony flags.
-  // TODO(rossberg): Is there a better place to put this?
-  if (FLAG_harmony) {
-    FLAG_harmony_typeof = true;
-    FLAG_harmony_scoping = true;
-    FLAG_harmony_proxies = true;
-    FLAG_harmony_collections = true;
-  }
-
   InitializeOncePerProcess();
 
   // The current thread may not yet had entered an isolate to run.
@@ -150,10 +140,9 @@ void V8::SetEntropySource(EntropySource source) {
 
 
 // Used by JavaScript APIs
-uint32_t V8::Random(Context* context) {
-  ASSERT(context->IsGlobalContext());
-  ByteArray* seed = context->random_seed();
-  return random_base(reinterpret_cast<uint32_t*>(seed->GetDataStartAddress()));
+uint32_t V8::Random(Isolate* isolate) {
+  ASSERT(isolate == Isolate::Current());
+  return random_base(isolate->random_seed());
 }
 
 
@@ -183,9 +172,8 @@ typedef union {
 } double_int_union;
 
 
-Object* V8::FillHeapNumberWithRandom(Object* heap_number,
-                                     Context* context) {
-  uint64_t random_bits = Random(context);
+Object* V8::FillHeapNumberWithRandom(Object* heap_number, Isolate* isolate) {
+  uint64_t random_bits = Random(isolate);
   // Make a double* from address (heap_number + sizeof(double)).
   double_int_union* r = reinterpret_cast<double_int_union*>(
       reinterpret_cast<char*>(heap_number) +
@@ -227,12 +215,6 @@ void V8::InitializeOncePerProcess() {
   FLAG_peephole_optimization = !use_crankshaft_;
 
   ElementsAccessor::InitializeOncePerProcess();
-
-  if (FLAG_stress_compaction) {
-    FLAG_force_marking_deque_overflows = true;
-    FLAG_gc_global = true;
-    FLAG_max_new_space_size = (1 << (kPageSizeBits - 10)) * 2;
-  }
 }
 
 } }  // namespace v8::internal

@@ -41,17 +41,6 @@
 namespace v8 {
 namespace internal {
 
-
-// General collection of bit-flags that can be passed to scanners and
-// parsers to signify their (initial) mode of operation.
-enum ParsingFlags {
-  kNoParsingFlags = 0,
-  kAllowLazy = 1,
-  kAllowNativesSyntax = 2,
-  kHarmonyScoping = 4
-};
-
-
 // Returns the value (0 .. 15) of a hexadecimal character c.
 // If c is not a legal hexadecimal character, returns a value < 0.
 inline int HexValue(uc32 c) {
@@ -520,11 +509,11 @@ class JavaScriptScanner : public Scanner {
   // tokens, which is what it is used for.
   void SeekForward(int pos);
 
-  bool HarmonyScoping() const {
-    return harmony_scoping_;
+  bool HarmonyBlockScoping() const {
+    return harmony_block_scoping_;
   }
-  void SetHarmonyScoping(bool block_scoping) {
-    harmony_scoping_ = block_scoping;
+  void SetHarmonyBlockScoping(bool block_scoping) {
+    harmony_block_scoping_ = block_scoping;
   }
 
 
@@ -567,7 +556,7 @@ class JavaScriptScanner : public Scanner {
   bool has_multiline_comment_before_next_;
   // Whether we scan 'let' as a keyword for harmony block scoped
   // let bindings.
-  bool harmony_scoping_;
+  bool harmony_block_scoping_;
 };
 
 } }  // namespace v8::internal

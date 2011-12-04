@@ -214,11 +214,10 @@ void LCmpIDAndBranch::PrintDataTo(StringStream* stream) {
 }
 
 
-void LIsNilAndBranch::PrintDataTo(StringStream* stream) {
+void LIsNullAndBranch::PrintDataTo(StringStream* stream) {
   stream->Add("if ");
   InputAt(0)->PrintTo(stream);
-  stream->Add(kind() == kStrictEquality ? " === " : " == ");
-  stream->Add(nil() == kNullValue ? "null" : "undefined");
+  stream->Add(is_strict() ? " === null" : " == null");
   stream->Add(" then B%d else B%d", true_block_id(), false_block_id());
 }
 
@@ -352,11 +351,7 @@ void LAccessArgumentsAt::PrintDataTo(StringStream* stream) {
 
 int LChunk::GetNextSpillIndex(bool is_double) {
   // Skip a slot if for a double-width slot.
-  if (is_double) {
-    spill_slot_count_ |= 1;  // Make it odd, so incrementing makes it even.
-    spill_slot_count_++;
-    num_double_slots_++;
-  }
+  if (is_double) spill_slot_count_++;
   return spill_slot_count_++;
 }
 
@@ -449,12 +444,6 @@ void LStoreKeyedGeneric::PrintDataTo(StringStream* stream) {
   key()->PrintTo(stream);
   stream->Add("] <- ");
   value()->PrintTo(stream);
-}
-
-
-void LTransitionElementsKind::PrintDataTo(StringStream* stream) {
-  object()->PrintTo(stream);
-  stream->Add(" %p -> %p", *original_map(), *transitioned_map());
 }
 
 
@@ -718,9 +707,7 @@ LInstruction* LChunkBuilder::DefineFixedDouble(
 
 LInstruction* LChunkBuilder::AssignEnvironment(LInstruction* instr) {
   HEnvironment* hydrogen_env = current_block_->last_environment();
-  int argument_index_accumulator = 0;
-  instr->set_environment(CreateEnvironment(hydrogen_env,
-                                           &argument_index_accumulator));
+  instr->set_environment(CreateEnvironment(hydrogen_env));
   return instr;
 }
 
@@ -1007,13 +994,10 @@ void LChunkBuilder::VisitInstruction(HInstruction* current) {
 }
 
 
-LEnvironment* LChunkBuilder::CreateEnvironment(
-    HEnvironment* hydrogen_env,
-    int* argument_index_accumulator) {
+LEnvironment* LChunkBuilder::CreateEnvironment(HEnvironment* hydrogen_env) {
   if (hydrogen_env == NULL) return NULL;
 
-  LEnvironment* outer =
-      CreateEnvironment(hydrogen_env->outer(), argument_index_accumulator);
+  LEnvironment* outer = CreateEnvironment(hydrogen_env->outer());
   int ast_id = hydrogen_env->ast_id();
   ASSERT(ast_id != AstNode::kNoNumber);
   int value_count = hydrogen_env->length();
@@ -1023,6 +1007,7 @@ LEnvironment* LChunkBuilder::CreateEnvironment(
                                           argument_count_,
                                           value_count,
                                           outer);
+  int argument_index = 0;
   for (int i = 0; i < value_count; ++i) {
     if (hydrogen_env->is_special_index(i)) continue;
 
@@ -1031,7 +1016,7 @@ LEnvironment* LChunkBuilder::CreateEnvironment(
     if (value->IsArgumentsObject()) {
       op = NULL;
     } else if (value->IsPushArgument()) {
-      op = new LArgument((*argument_index_accumulator)++);
+      op = new LArgument(argument_index++);
     } else {
       op = UseAny(value);
     }
@@ -1440,11 +1425,13 @@ LInstruction* LChunkBuilder::DoPower(HPower* instr) {
 
 
 LInstruction* LChunkBuilder::DoCompareGeneric(HCompareGeneric* instr) {
+  Token::Value op = instr->token();
   ASSERT(instr->left()->representation().IsTagged());
   ASSERT(instr->right()->representation().IsTagged());
+  bool reversed = (op == Token::GT || op == Token::LTE);
   LOperand* context = UseFixed(instr->context(), esi);
-  LOperand* left = UseFixed(instr->left(), edx);
-  LOperand* right = UseFixed(instr->right(), eax);
+  LOperand* left = UseFixed(instr->left(), reversed ? eax : edx);
+  LOperand* right = UseFixed(instr->right(), reversed ? edx : eax);
   LCmpT* result = new LCmpT(context, left, right);
   return MarkAsCall(DefineFixed(result, eax), instr);
 }
@@ -1456,22 +1443,15 @@ LInstruction* LChunkBuilder::DoCompareIDAndBranch(
   if (r.IsInteger32()) {
     ASSERT(instr->left()->representation().IsInteger32());
     ASSERT(instr->right()->representation().IsInteger32());
-    LOperand* left = UseRegisterOrConstantAtStart(instr->left());
+    LOperand* left = UseRegisterAtStart(instr->left());
     LOperand* right = UseOrConstantAtStart(instr->right());
     return new LCmpIDAndBranch(left, right);
   } else {
     ASSERT(r.IsDouble());
     ASSERT(instr->left()->representation().IsDouble());
     ASSERT(instr->right()->representation().IsDouble());
-    LOperand* left;
-    LOperand* right;
-    if (instr->left()->IsConstant() && instr->right()->IsConstant()) {
-      left = UseRegisterOrConstantAtStart(instr->left());
-      right = UseRegisterOrConstantAtStart(instr->right());
-    } else {
-      left = UseRegisterAtStart(instr->left());
-      right = UseRegisterAtStart(instr->right());
-    }
+    LOperand* left = UseRegisterAtStart(instr->left());
+    LOperand* right = UseRegisterAtStart(instr->right());
     return new LCmpIDAndBranch(left, right);
   }
 }
@@ -1491,10 +1471,10 @@ LInstruction* LChunkBuilder::DoCompareConstantEqAndBranch(
 }
 
 
-LInstruction* LChunkBuilder::DoIsNilAndBranch(HIsNilAndBranch* instr) {
+LInstruction* LChunkBuilder::DoIsNullAndBranch(HIsNullAndBranch* instr) {
   // We only need a temp register for non-strict compare.
-  LOperand* temp = instr->kind() == kStrictEquality ? NULL : TempRegister();
-  return new LIsNilAndBranch(UseRegisterAtStart(instr->value()), temp);
+  LOperand* temp = instr->is_strict() ? NULL : TempRegister();
+  return new LIsNullAndBranch(UseRegisterAtStart(instr->value()), temp);
 }
 
 
@@ -1703,13 +1683,7 @@ LInstruction* LChunkBuilder::DoCheckSmi(HCheckSmi* instr) {
 
 
 LInstruction* LChunkBuilder::DoCheckFunction(HCheckFunction* instr) {
-  // If the target is in new space, we'll emit a global cell compare and so
-  // want the value in a register.  If the target gets promoted before we
-  // emit code, we will still get the register but will do an immediate
-  // compare instead of the cell compare.  This is safe.
-  LOperand* value = Isolate::Current()->heap()->InNewSpace(*instr->target())
-      ? UseRegisterAtStart(instr->value())
-      : UseAtStart(instr->value());
+  LOperand* value = UseAtStart(instr->value());
   return AssignEnvironment(new LCheckFunction(value));
 }
 
@@ -1796,7 +1770,7 @@ LInstruction* LChunkBuilder::DoConstant(HConstant* instr) {
 
 LInstruction* LChunkBuilder::DoLoadGlobalCell(HLoadGlobalCell* instr) {
   LLoadGlobalCell* result = new LLoadGlobalCell;
-  return instr->RequiresHoleCheck()
+  return instr->check_hole_value()
       ? AssignEnvironment(DefineAsRegister(result))
       : DefineAsRegister(result);
 }
@@ -1812,10 +1786,8 @@ LInstruction* LChunkBuilder::DoLoadGlobalGeneric(HLoadGlobalGeneric* instr) {
 
 LInstruction* LChunkBuilder::DoStoreGlobalCell(HStoreGlobalCell* instr) {
   LStoreGlobalCell* result =
-      new LStoreGlobalCell(UseTempRegister(instr->value()),
-                           TempRegister(),
-                           TempRegister());
-  return instr->RequiresHoleCheck() ? AssignEnvironment(result) : result;
+      new LStoreGlobalCell(UseRegisterAtStart(instr->value()));
+  return instr->check_hole_value() ? AssignEnvironment(result) : result;
 }
 
 
@@ -1836,13 +1808,15 @@ LInstruction* LChunkBuilder::DoLoadContextSlot(HLoadContextSlot* instr) {
 
 
 LInstruction* LChunkBuilder::DoStoreContextSlot(HStoreContextSlot* instr) {
+  LOperand* context;
   LOperand* value;
   LOperand* temp;
-  LOperand* context = UseRegister(instr->context());
   if (instr->NeedsWriteBarrier()) {
+    context = UseTempRegister(instr->context());
     value = UseTempRegister(instr->value());
     temp = TempRegister();
   } else {
+    context = UseRegister(instr->context());
     value = UseRegister(instr->value());
     temp = NULL;
   }
@@ -1970,7 +1944,7 @@ LInstruction* LChunkBuilder::DoStoreKeyedFastElement(
   ASSERT(instr->object()->representation().IsTagged());
   ASSERT(instr->key()->representation().IsInteger32());
 
-  LOperand* obj = UseRegister(instr->object());
+  LOperand* obj = UseTempRegister(instr->object());
   LOperand* val = needs_write_barrier
       ? UseTempRegister(instr->value())
       : UseRegisterAtStart(instr->value());
@@ -2044,38 +2018,12 @@ LInstruction* LChunkBuilder::DoStoreKeyedGeneric(HStoreKeyedGeneric* instr) {
 }
 
 
-LInstruction* LChunkBuilder::DoTransitionElementsKind(
-    HTransitionElementsKind* instr) {
-  if (instr->original_map()->elements_kind() == FAST_SMI_ONLY_ELEMENTS &&
-      instr->transitioned_map()->elements_kind() == FAST_ELEMENTS) {
-    LOperand* object = UseRegister(instr->object());
-    LOperand* new_map_reg = TempRegister();
-    LOperand* temp_reg = TempRegister();
-    LTransitionElementsKind* result =
-        new LTransitionElementsKind(object, new_map_reg, temp_reg);
-    return DefineSameAsFirst(result);
-  } else {
-    LOperand* object = UseFixed(instr->object(), eax);
-    LOperand* fixed_object_reg = FixedTemp(edx);
-    LOperand* new_map_reg = FixedTemp(ebx);
-    LTransitionElementsKind* result =
-        new LTransitionElementsKind(object, new_map_reg, fixed_object_reg);
-    return MarkAsCall(DefineFixed(result, eax), instr);
-  }
-}
-
-
 LInstruction* LChunkBuilder::DoStoreNamedField(HStoreNamedField* instr) {
   bool needs_write_barrier = instr->NeedsWriteBarrier();
 
-  LOperand* obj;
-  if (needs_write_barrier) {
-    obj = instr->is_in_object()
-        ? UseRegister(instr->object())
-        : UseTempRegister(instr->object());
-  } else {
-    obj = UseRegisterAtStart(instr->object());
-  }
+  LOperand* obj = needs_write_barrier
+      ? UseTempRegister(instr->object())
+      : UseRegisterAtStart(instr->object());
 
   LOperand* val = needs_write_barrier
       ? UseTempRegister(instr->value())

@@ -38,18 +38,22 @@
 #include <limits.h> /* PATH_MAX */
 #include <sys/uio.h> /* writev */
 
+#ifdef __linux__
+# include <sys/ioctl.h>
+#endif
+
 #ifdef __sun
 # include <sys/types.h>
 # include <sys/wait.h>
 #endif
 
-#if defined(__APPLE__)
-#include <mach-o/dyld.h> /* _NSGetExecutablePath */
+#ifdef __APPLE__
+# include <mach-o/dyld.h> /* _NSGetExecutablePath */
 #endif
 
-#if defined(__FreeBSD__)
-#include <sys/sysctl.h>
-#include <sys/wait.h>
+#ifdef __FreeBSD__
+# include <sys/sysctl.h>
+# include <sys/wait.h>
 #endif
 
 static uv_loop_t default_loop_struct;
@@ -154,7 +158,7 @@ void uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
 }
 
 
-uv_loop_t* uv_loop_new() {
+uv_loop_t* uv_loop_new(void) {
   uv_loop_t* loop = calloc(1, sizeof(uv_loop_t));
   loop->ev = ev_loop_new(0);
   ev_set_userdata(loop->ev, loop);
@@ -169,7 +173,7 @@ void uv_loop_delete(uv_loop_t* loop) {
 }
 
 
-uv_loop_t* uv_default_loop() {
+uv_loop_t* uv_default_loop(void) {
   if (!default_loop_ptr) {
     default_loop_ptr = &default_loop_struct;
 #if HAVE_KQUEUE
@@ -585,6 +589,10 @@ int64_t uv_timer_get_repeat(uv_timer_t* timer) {
 static int uv_getaddrinfo_done(eio_req* req) {
   uv_getaddrinfo_t* handle = req->data;
   struct addrinfo *res = handle->res;
+#if __sun
+  size_t hostlen = strlen(handle->hostname);
+#endif
+
   handle->res = NULL;
 
   uv_unref(handle->loop);
@@ -593,9 +601,21 @@ static int uv_getaddrinfo_done(eio_req* req) {
   free(handle->service);
   free(handle->hostname);
 
-  if (handle->retcode != 0) {
-    /* TODO how to display gai error strings? */
-    uv__set_sys_error(handle->loop, handle->retcode);
+  if (handle->retcode == 0) {
+    /* OK */
+#if EAI_NODATA /* FreeBSD deprecated EAI_NODATA */
+  } else if (handle->retcode == EAI_NONAME || handle->retcode == EAI_NODATA) {
+#else
+  } else if (handle->retcode == EAI_NONAME) {
+#endif
+    uv__set_sys_error(handle->loop, ENOENT); /* FIXME compatibility hack */
+#if __sun
+  } else if (handle->retcode == EAI_MEMORY && hostlen >= MAXHOSTNAMELEN) {
+    uv__set_sys_error(handle->loop, ENOENT);
+#endif
+  } else {
+    handle->loop->last_err.code = UV_EADDRINFO;
+    handle->loop->last_err.sys_errno_ = handle->retcode;
   }
 
   handle->cb(handle, handle->retcode, res);
@@ -674,22 +694,30 @@ void uv_freeaddrinfo(struct addrinfo* ai) {
 
 /* Open a socket in non-blocking close-on-exec mode, atomically if possible. */
 int uv__socket(int domain, int type, int protocol) {
-#if defined(SOCK_NONBLOCK) && defined(SOCK_CLOEXEC)
-  return socket(domain, type | SOCK_NONBLOCK | SOCK_CLOEXEC, protocol);
-#else
   int sockfd;
 
-  if ((sockfd = socket(domain, type, protocol)) == -1) {
-    return -1;
-  }
+#if defined(SOCK_NONBLOCK) && defined(SOCK_CLOEXEC)
+  sockfd = socket(domain, type | SOCK_NONBLOCK | SOCK_CLOEXEC, protocol);
 
-  if (uv__nonblock(sockfd, 1) == -1 || uv__cloexec(sockfd, 1) == -1) {
-    uv__close(sockfd);
-    return -1;
-  }
+  if (sockfd != -1)
+    goto out;
 
-  return sockfd;
+  if (errno != EINVAL)
+    goto out;
 #endif
+
+  sockfd = socket(domain, type, protocol);
+
+  if (sockfd == -1)
+    goto out;
+
+  if (uv__nonblock(sockfd, 1) || uv__cloexec(sockfd, 1)) {
+    uv__close(sockfd);
+    sockfd = -1;
+  }
+
+out:
+  return sockfd;
 }
 
 
@@ -698,19 +726,34 @@ int uv__accept(int sockfd, struct sockaddr* saddr, socklen_t slen) {
 
   assert(sockfd >= 0);
 
-  do {
-#if defined(HAVE_ACCEPT4)
-    peerfd = accept4(sockfd, saddr, &slen, SOCK_NONBLOCK | SOCK_CLOEXEC);
-#else
-    if ((peerfd = accept(sockfd, saddr, &slen)) != -1) {
-      if (uv__cloexec(peerfd, 1) == -1 || uv__nonblock(peerfd, 1) == -1) {
-        uv__close(peerfd);
-        return -1;
-      }
-    }
+  while (1) {
+#if HAVE_SYS_ACCEPT4
+    peerfd = sys_accept4(sockfd, saddr, &slen, SOCK_NONBLOCK | SOCK_CLOEXEC);
+
+    if (peerfd != -1)
+      break;
+
+    if (errno == EINTR)
+      continue;
+
+    if (errno != ENOSYS)
+      break;
 #endif
+
+    if ((peerfd = accept(sockfd, saddr, &slen)) == -1) {
+      if (errno == EINTR)
+        continue;
+      else
+        break;
+    }
+
+    if (uv__cloexec(peerfd, 1) || uv__nonblock(peerfd, 1)) {
+      uv__close(peerfd);
+      peerfd = -1;
+    }
+
+    break;
   }
-  while (peerfd == -1 && errno == EINTR);
 
   return peerfd;
 }
@@ -734,6 +777,9 @@ int uv__close(int fd) {
 
 
 int uv__nonblock(int fd, int set) {
+#if FIONBIO
+  return ioctl(fd, FIONBIO, &set);
+#else
   int flags;
 
   if ((flags = fcntl(fd, F_GETFL)) == -1) {
@@ -751,10 +797,17 @@ int uv__nonblock(int fd, int set) {
   }
 
   return 0;
+#endif
 }
 
 
 int uv__cloexec(int fd, int set) {
+#if __linux__
+  /* Linux knows only FD_CLOEXEC so we can safely omit the fcntl(F_GETFD)
+   * syscall. CHECKME: That's probably true for other Unices as well.
+   */
+  return fcntl(fd, F_SETFD, set ? FD_CLOEXEC : 0);
+#else
   int flags;
 
   if ((flags = fcntl(fd, F_GETFD)) == -1) {
@@ -772,6 +825,7 @@ int uv__cloexec(int fd, int set) {
   }
 
   return 0;
+#endif
 }
 
 
@@ -790,4 +844,26 @@ size_t uv__strlcpy(char* dst, const char* src, size_t size) {
   *dst = '\0';
 
   return src - org;
+}
+
+
+uv_err_t uv_cwd(char* buffer, size_t size) {
+  if (!buffer || !size) {
+    return uv__new_artificial_error(UV_EINVAL);
+  }
+
+  if (getcwd(buffer, size)) {
+    return uv_ok_;
+  } else {
+    return uv__new_sys_error(errno);
+  }
+}
+
+
+uv_err_t uv_chdir(const char* dir) {
+  if (chdir(dir) == 0) {
+    return uv_ok_;
+  } else {
+    return uv__new_sys_error(errno);
+  }
 }

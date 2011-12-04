@@ -30,9 +30,6 @@
 #include "internal.h"
 
 
-const uv_err_t uv_ok_ = { UV_OK, ERROR_SUCCESS };
-
-
 /*
  * Display an error message and abort the event loop.
  */
@@ -67,34 +64,14 @@ void uv_fatal_error(const int errorno, const char* syscall) {
 }
 
 
-/* TODO: thread safety */
-static char* last_err_str_ = NULL;
-
-char* uv_strerror(uv_err_t err) {
-  if (last_err_str_ != NULL) {
-    LocalFree(last_err_str_);
-  }
-
-  FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-      FORMAT_MESSAGE_IGNORE_INSERTS, NULL, err.sys_errno_,
-      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR) &last_err_str_, 0,
-      NULL);
-
-  if (last_err_str_) {
-    return last_err_str_;
-  } else {
-    return "Unknown error";
-  }
-}
-
-
 uv_err_code uv_translate_sys_error(int sys_errno) {
   switch (sys_errno) {
     case ERROR_SUCCESS:                     return UV_OK;
     case ERROR_FILE_NOT_FOUND:              return UV_ENOENT;
     case ERROR_PATH_NOT_FOUND:              return UV_ENOENT;
-    case ERROR_NOACCESS:                    return UV_EACCESS;
-    case WSAEACCES:                         return UV_EACCESS;
+    case ERROR_ACCESS_DENIED:               return UV_EACCES;
+    case ERROR_NOACCESS:                    return UV_EACCES;
+    case WSAEACCES:                         return UV_EACCES;
     case ERROR_ADDRESS_ALREADY_ASSOCIATED:  return UV_EADDRINUSE;
     case WSAEADDRINUSE:                     return UV_EADDRINUSE;
     case WSAEADDRNOTAVAIL:                  return UV_EADDRNOTAVAIL;

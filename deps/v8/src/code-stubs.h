@@ -30,7 +30,6 @@
 
 #include "allocation.h"
 #include "globals.h"
-#include "codegen.h"
 
 namespace v8 {
 namespace internal {
@@ -46,23 +45,27 @@ namespace internal {
   V(Compare)                             \
   V(CompareIC)                           \
   V(MathPow)                             \
-  V(RecordWrite)                         \
-  V(StoreBufferOverflow)                 \
-  V(RegExpExec)                          \
   V(TranscendentalCache)                 \
   V(Instanceof)                          \
+  /* All stubs above this line only exist in a few versions, which are  */  \
+  /* generated ahead of time.  Therefore compiling a call to one of     */  \
+  /* them can't cause a new stub to be compiled, so compiling a call to */  \
+  /* them is GC safe.  The ones below this line exist in many variants  */  \
+  /* so code compiling a call to one can cause a GC.  This means they   */  \
+  /* can't be called from other stubs, since stub generation code is    */  \
+  /* not GC safe.                                                       */  \
   V(ConvertToDouble)                     \
   V(WriteInt32ToHeapNumber)              \
   V(StackCheck)                          \
   V(FastNewClosure)                      \
   V(FastNewContext)                      \
-  V(FastNewBlockContext)                 \
   V(FastCloneShallowArray)               \
   V(RevertToNumber)                      \
   V(ToBoolean)                           \
   V(ToNumber)                            \
   V(CounterOp)                           \
   V(ArgumentsAccess)                     \
+  V(RegExpExec)                          \
   V(RegExpConstructResult)               \
   V(NumberToString)                      \
   V(CEntry)                              \
@@ -70,8 +73,7 @@ namespace internal {
   V(KeyedLoadElement)                    \
   V(KeyedStoreElement)                   \
   V(DebuggerStatement)                   \
-  V(StringDictionaryLookup)              \
-  V(ElementsTransitionAndStore)
+  V(StringDictionaryNegativeLookup)
 
 // List of code stubs only used on ARM platforms.
 #ifdef V8_TARGET_ARCH_ARM
@@ -140,27 +142,6 @@ class CodeStub BASE_EMBEDDED {
 
   virtual ~CodeStub() {}
 
-  bool CompilingCallsToThisStubIsGCSafe() {
-    bool is_pregenerated = IsPregenerated();
-    Code* code = NULL;
-    CHECK(!is_pregenerated || FindCodeInCache(&code));
-    return is_pregenerated;
-  }
-
-  // See comment above, where Instanceof is defined.
-  virtual bool IsPregenerated() { return false; }
-
-  static void GenerateStubsAheadOfTime();
-  static void GenerateFPStubs();
-
-  // Some stubs put untagged junk on the stack that cannot be scanned by the
-  // GC.  This means that we must be statically sure that no GC can occur while
-  // they are running.  If that is the case they should override this to return
-  // true, which will cause an assertion if we try to call something that can
-  // GC or if we try to put a stack frame on top of the junk, which would not
-  // result in a traversable stack.
-  virtual bool SometimesSetsUpAFrame() { return true; }
-
  protected:
   static const int kMajorBits = 6;
   static const int kMinorBits = kBitsPerInt - kSmiTagSize - kMajorBits;
@@ -183,14 +164,6 @@ class CodeStub BASE_EMBEDDED {
   // Finish the code object after it has been generated.
   virtual void FinishCode(Code* code) { }
 
-  // Returns true if TryGetCode should fail if it failed
-  // to register newly generated stub in the stub cache.
-  virtual bool MustBeInStubCache() { return false; }
-
-  // Activate newly generated stub. Is called after
-  // registering stub in the stub cache.
-  virtual void Activate(Code* code) { }
-
   // Returns information for computing the number key.
   virtual Major MajorKey() = 0;
   virtual int MinorKey() = 0;
@@ -205,7 +178,9 @@ class CodeStub BASE_EMBEDDED {
 
   // Returns a name for logging/debugging purposes.
   SmartArrayPointer<const char> GetName();
-  virtual void PrintName(StringStream* stream);
+  virtual void PrintName(StringStream* stream) {
+    stream->Add("%s", MajorName(MajorKey(), false));
+  }
 
   // Returns whether the code generated for this stub needs to be allocated as
   // a fixed (non-moveable) code object.
@@ -217,6 +192,9 @@ class CodeStub BASE_EMBEDDED {
     return MinorKeyBits::encode(MinorKey()) |
            MajorKeyBits::encode(MajorKey());
   }
+
+  // See comment above, where Instanceof is defined.
+  bool AllowsStubCalls() { return MajorKey() <= Instanceof; }
 
   class MajorKeyBits: public BitField<uint32_t, 0, kMajorBits> {};
   class MinorKeyBits: public BitField<uint32_t, kMajorBits, kMinorBits> {};
@@ -326,7 +304,7 @@ class FastNewContextStub : public CodeStub {
   static const int kMaximumSlots = 64;
 
   explicit FastNewContextStub(int slots) : slots_(slots) {
-    ASSERT(slots_ > 0 && slots_ <= kMaximumSlots);
+    ASSERT(slots_ > 0 && slots <= kMaximumSlots);
   }
 
   void Generate(MacroAssembler* masm);
@@ -339,24 +317,6 @@ class FastNewContextStub : public CodeStub {
 };
 
 
-class FastNewBlockContextStub : public CodeStub {
- public:
-  static const int kMaximumSlots = 64;
-
-  explicit FastNewBlockContextStub(int slots) : slots_(slots) {
-    ASSERT(slots_ > 0 && slots_ <= kMaximumSlots);
-  }
-
-  void Generate(MacroAssembler* masm);
-
- private:
-  int slots_;
-
-  Major MajorKey() { return FastNewBlockContext; }
-  int MinorKey() { return slots_; }
-};
-
-
 class FastCloneShallowArrayStub : public CodeStub {
  public:
   // Maximum length of copied elements array.
@@ -364,7 +324,6 @@ class FastCloneShallowArrayStub : public CodeStub {
 
   enum Mode {
     CLONE_ELEMENTS,
-    CLONE_DOUBLE_ELEMENTS,
     COPY_ON_WRITE_ELEMENTS
   };
 
@@ -383,8 +342,8 @@ class FastCloneShallowArrayStub : public CodeStub {
 
   Major MajorKey() { return FastCloneShallowArray; }
   int MinorKey() {
-    ASSERT(mode_ == 0 || mode_ == 1 || mode_ == 2);
-    return length_ * 3 +  mode_;
+    ASSERT(mode_ == 0 || mode_ == 1);
+    return (length_ << 1) | mode_;
   }
 };
 
@@ -572,18 +531,11 @@ class CompareStub: public CodeStub {
 
 class CEntryStub : public CodeStub {
  public:
-  explicit CEntryStub(int result_size,
-                      SaveFPRegsMode save_doubles = kDontSaveFPRegs)
-      : result_size_(result_size), save_doubles_(save_doubles) { }
+  explicit CEntryStub(int result_size)
+      : result_size_(result_size), save_doubles_(false) { }
 
   void Generate(MacroAssembler* masm);
-
-  // The version of this stub that doesn't save doubles is generated ahead of
-  // time, so it's OK to call it from other stubs that can't cope with GC during
-  // their code generation.  On machines that always have gp registers (x64) we
-  // can generate both variants ahead of time.
-  virtual bool IsPregenerated();
-  static void GenerateAheadOfTime();
+  void SaveDoubles() { save_doubles_ = true; }
 
  private:
   void GenerateCore(MacroAssembler* masm,
@@ -598,7 +550,7 @@ class CEntryStub : public CodeStub {
 
   // Number of pointers/values returned.
   const int result_size_;
-  SaveFPRegsMode save_doubles_;
+  bool save_doubles_;
 
   Major MajorKey() { return CEntry; }
   int MinorKey();
@@ -695,30 +647,8 @@ class CallFunctionStub: public CodeStub {
 
   void Generate(MacroAssembler* masm);
 
-  virtual void FinishCode(Code* code);
-
-  static void Clear(Heap* heap, Address address);
-
-  static Object* GetCachedValue(Address address);
-
   static int ExtractArgcFromMinorKey(int minor_key) {
     return ArgcBits::decode(minor_key);
-  }
-
-  // The object that indicates an uninitialized cache.
-  static Handle<Object> UninitializedSentinel(Isolate* isolate) {
-    return isolate->factory()->the_hole_value();
-  }
-
-  // A raw version of the uninitialized sentinel that's safe to read during
-  // garbage collection (e.g., for patching the cache).
-  static Object* RawUninitializedSentinel(Heap* heap) {
-    return heap->raw_unchecked_the_hole_value();
-  }
-
-  // The object that indicates a megamorphic state.
-  static Handle<Object> MegamorphicSentinel(Isolate* isolate) {
-    return isolate->factory()->undefined_value();
   }
 
  private:
@@ -728,8 +658,8 @@ class CallFunctionStub: public CodeStub {
   virtual void PrintName(StringStream* stream);
 
   // Minor key encoding in 32 bits with Bitfield <Type, shift, size>.
-  class FlagBits: public BitField<CallFunctionFlags, 0, 2> {};
-  class ArgcBits: public BitField<unsigned, 2, 32 - 2> {};
+  class FlagBits: public BitField<CallFunctionFlags, 0, 1> {};
+  class ArgcBits: public BitField<unsigned, 1, 32 - 1> {};
 
   Major MajorKey() { return CallFunction; }
   int MinorKey() {
@@ -739,10 +669,6 @@ class CallFunctionStub: public CodeStub {
 
   bool ReceiverMightBeImplicit() {
     return (flags_ & RECEIVER_MIGHT_BE_IMPLICIT) != 0;
-  }
-
-  bool RecordCallTarget() {
-    return (flags_ & RECORD_CALL_TARGET) != 0;
   }
 };
 
@@ -1008,8 +934,6 @@ class ToBooleanStub: public CodeStub {
   virtual int GetCodeKind() { return Code::TO_BOOLEAN_IC; }
   virtual void PrintName(StringStream* stream);
 
-  virtual bool SometimesSetsUpAFrame() { return false; }
-
  private:
   Major MajorKey() { return ToBoolean; }
   int MinorKey() { return (tos_.code() << NUMBER_OF_TYPES) | types_.ToByte(); }
@@ -1026,42 +950,6 @@ class ToBooleanStub: public CodeStub {
 
   Register tos_;
   Types types_;
-};
-
-
-class ElementsTransitionAndStoreStub : public CodeStub {
- public:
-  ElementsTransitionAndStoreStub(ElementsKind from,
-                                 ElementsKind to,
-                                 bool is_jsarray,
-                                 StrictModeFlag strict_mode)
-      : from_(from),
-        to_(to),
-        is_jsarray_(is_jsarray),
-        strict_mode_(strict_mode) {}
-
- private:
-  class FromBits:       public BitField<ElementsKind,    0, 8> {};
-  class ToBits:         public BitField<ElementsKind,    8, 8> {};
-  class IsJSArrayBits:  public BitField<bool,           16, 8> {};
-  class StrictModeBits: public BitField<StrictModeFlag, 24, 8> {};
-
-  Major MajorKey() { return ElementsTransitionAndStore; }
-  int MinorKey() {
-    return FromBits::encode(from_) |
-        ToBits::encode(to_) |
-        IsJSArrayBits::encode(is_jsarray_) |
-        StrictModeBits::encode(strict_mode_);
-  }
-
-  void Generate(MacroAssembler* masm);
-
-  ElementsKind from_;
-  ElementsKind to_;
-  bool is_jsarray_;
-  StrictModeFlag strict_mode_;
-
-  DISALLOW_COPY_AND_ASSIGN(ElementsTransitionAndStoreStub);
 };
 
 } }  // namespace v8::internal

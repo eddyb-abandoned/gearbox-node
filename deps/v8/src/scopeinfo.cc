@@ -51,7 +51,6 @@ ScopeInfo<Allocator>::ScopeInfo(Scope* scope)
     : function_name_(FACTORY->empty_symbol()),
       calls_eval_(scope->calls_eval()),
       is_strict_mode_(scope->is_strict_mode()),
-      type_(scope->type()),
       parameters_(scope->num_parameters()),
       stack_slots_(scope->num_stack_slots()),
       context_slots_(scope->num_heap_slots()),
@@ -139,7 +138,7 @@ ScopeInfo<Allocator>::ScopeInfo(Scope* scope)
       ASSERT(proxy->var()->index() - Context::MIN_CONTEXT_SLOTS ==
              context_modes_.length());
       context_slots_.Add(FACTORY->empty_symbol());
-      context_modes_.Add(proxy->var()->mode());
+      context_modes_.Add(Variable::INTERNAL);
     }
   }
 }
@@ -150,10 +149,6 @@ ScopeInfo<Allocator>::ScopeInfo(Scope* scope)
 // - function name
 //
 // - calls eval boolean flag
-//
-// - is strict mode scope
-//
-// - scope type
 //
 // - number of variables in the context object (smi) (= function context
 //   slot index + 1)
@@ -186,9 +181,8 @@ ScopeInfo<Allocator>::ScopeInfo(Scope* scope)
 //   present)
 
 
-template <class T>
-static inline Object** ReadInt(Object** p, T* x) {
-  *x = static_cast<T>((reinterpret_cast<Smi*>(*p++))->value());
+static inline Object** ReadInt(Object** p, int* x) {
+  *x = (reinterpret_cast<Smi*>(*p++))->value();
   return p;
 }
 
@@ -199,21 +193,20 @@ static inline Object** ReadBool(Object** p, bool* x) {
 }
 
 
-template <class T>
-static inline Object** ReadObject(Object** p, Handle<T>* s) {
-  *s = Handle<T>::cast(Handle<Object>(*p++));
+static inline Object** ReadSymbol(Object** p, Handle<String>* s) {
+  *s = Handle<String>(reinterpret_cast<String*>(*p++));
   return p;
 }
 
 
-template <class Allocator, class T>
-static Object** ReadList(Object** p, List<Handle<T>, Allocator >* list) {
+template <class Allocator>
+static Object** ReadList(Object** p, List<Handle<String>, Allocator >* list) {
   ASSERT(list->is_empty());
   int n;
   p = ReadInt(p, &n);
   while (n-- > 0) {
-    Handle<T> s;
-    p = ReadObject(p, &s);
+    Handle<String> s;
+    p = ReadSymbol(p, &s);
     list->Add(s);
   }
   return p;
@@ -223,17 +216,17 @@ static Object** ReadList(Object** p, List<Handle<T>, Allocator >* list) {
 template <class Allocator>
 static Object** ReadList(Object** p,
                          List<Handle<String>, Allocator>* list,
-                         List<VariableMode, Allocator>* modes) {
+                         List<Variable::Mode, Allocator>* modes) {
   ASSERT(list->is_empty());
   int n;
   p = ReadInt(p, &n);
   while (n-- > 0) {
     Handle<String> s;
     int m;
-    p = ReadObject(p, &s);
+    p = ReadSymbol(p, &s);
     p = ReadInt(p, &m);
     list->Add(s);
-    modes->Add(static_cast<VariableMode>(m));
+    modes->Add(static_cast<Variable::Mode>(m));
   }
   return p;
 }
@@ -249,10 +242,9 @@ ScopeInfo<Allocator>::ScopeInfo(SerializedScopeInfo* data)
   if (data->length() > 0) {
     Object** p0 = data->data_start();
     Object** p = p0;
-    p = ReadObject(p, &function_name_);
+    p = ReadSymbol(p, &function_name_);
     p = ReadBool(p, &calls_eval_);
     p = ReadBool(p, &is_strict_mode_);
-    p = ReadInt(p, &type_);
     p = ReadList<Allocator>(p, &context_slots_, &context_modes_);
     p = ReadList<Allocator>(p, &parameters_);
     p = ReadList<Allocator>(p, &stack_slots_);
@@ -273,19 +265,18 @@ static inline Object** WriteBool(Object** p, bool b) {
 }
 
 
-template <class T>
-static inline Object** WriteObject(Object** p, Handle<T> s) {
+static inline Object** WriteSymbol(Object** p, Handle<String> s) {
   *p++ = *s;
   return p;
 }
 
 
-template <class Allocator, class T>
-static Object** WriteList(Object** p, List<Handle<T>, Allocator >* list) {
+template <class Allocator>
+static Object** WriteList(Object** p, List<Handle<String>, Allocator >* list) {
   const int n = list->length();
   p = WriteInt(p, n);
   for (int i = 0; i < n; i++) {
-    p = WriteObject(p, list->at(i));
+    p = WriteSymbol(p, list->at(i));
   }
   return p;
 }
@@ -294,11 +285,11 @@ static Object** WriteList(Object** p, List<Handle<T>, Allocator >* list) {
 template <class Allocator>
 static Object** WriteList(Object** p,
                           List<Handle<String>, Allocator>* list,
-                          List<VariableMode, Allocator>* modes) {
+                          List<Variable::Mode, Allocator>* modes) {
   const int n = list->length();
   p = WriteInt(p, n);
   for (int i = 0; i < n; i++) {
-    p = WriteObject(p, list->at(i));
+    p = WriteSymbol(p, list->at(i));
     p = WriteInt(p, modes->at(i));
   }
   return p;
@@ -307,9 +298,8 @@ static Object** WriteList(Object** p,
 
 template<class Allocator>
 Handle<SerializedScopeInfo> ScopeInfo<Allocator>::Serialize() {
-  // function name, calls eval, is_strict_mode, scope type,
-  // length for 3 tables:
-  const int extra_slots = 1 + 1 + 1 + 1 + 3;
+  // function name, calls eval, is_strict_mode, length for 3 tables:
+  const int extra_slots = 1 + 1 + 1 + 3;
   int length = extra_slots +
                context_slots_.length() * 2 +
                parameters_.length() +
@@ -321,10 +311,9 @@ Handle<SerializedScopeInfo> ScopeInfo<Allocator>::Serialize() {
 
   Object** p0 = data->data_start();
   Object** p = p0;
-  p = WriteObject(p, function_name_);
+  p = WriteSymbol(p, function_name_);
   p = WriteBool(p, calls_eval_);
   p = WriteBool(p, is_strict_mode_);
-  p = WriteInt(p, type_);
   p = WriteList(p, &context_slots_, &context_modes_);
   p = WriteList(p, &parameters_);
   p = WriteList(p, &stack_slots_);
@@ -372,8 +361,8 @@ SerializedScopeInfo* SerializedScopeInfo::Empty() {
 
 Object** SerializedScopeInfo::ContextEntriesAddr() {
   ASSERT(length() > 0);
-  // +4 for function name, calls eval, strict mode, scope type.
-  return data_start() + 4;
+  // +3 for function name, calls eval, strict mode.
+  return data_start() + 3;
 }
 
 
@@ -417,16 +406,6 @@ bool SerializedScopeInfo::IsStrictMode() {
 }
 
 
-ScopeType SerializedScopeInfo::Type() {
-  ASSERT(length() > 0);
-  // +3 for function name, calls eval, strict mode.
-  Object** p = data_start() + 3;
-  ScopeType type;
-  p = ReadInt(p, &type);
-  return type;
-}
-
-
 int SerializedScopeInfo::NumberOfStackSlots() {
   if (length() > 0) {
     Object** p = StackSlotEntriesAddr();
@@ -460,12 +439,6 @@ bool SerializedScopeInfo::HasHeapAllocatedLocals() {
 }
 
 
-bool SerializedScopeInfo::HasContext() {
-  return HasHeapAllocatedLocals() ||
-      Type() == WITH_SCOPE;
-}
-
-
 int SerializedScopeInfo::StackSlotIndex(String* name) {
   ASSERT(name->IsSymbol());
   if (length() > 0) {
@@ -483,7 +456,7 @@ int SerializedScopeInfo::StackSlotIndex(String* name) {
   return -1;
 }
 
-int SerializedScopeInfo::ContextSlotIndex(String* name, VariableMode* mode) {
+int SerializedScopeInfo::ContextSlotIndex(String* name, Variable::Mode* mode) {
   ASSERT(name->IsSymbol());
   Isolate* isolate = GetIsolate();
   int result = isolate->context_slot_cache()->Lookup(this, name, mode);
@@ -500,7 +473,7 @@ int SerializedScopeInfo::ContextSlotIndex(String* name, VariableMode* mode) {
         ASSERT(((p - p0) & 1) == 0);
         int v;
         ReadInt(p + 1, &v);
-        VariableMode mode_value = static_cast<VariableMode>(v);
+        Variable::Mode mode_value = static_cast<Variable::Mode>(v);
         if (mode != NULL) *mode = mode_value;
         result = static_cast<int>((p - p0) >> 1) + Context::MIN_CONTEXT_SLOTS;
         isolate->context_slot_cache()->Update(this, name, mode_value, result);
@@ -509,7 +482,7 @@ int SerializedScopeInfo::ContextSlotIndex(String* name, VariableMode* mode) {
       p += 2;
     }
   }
-  isolate->context_slot_cache()->Update(this, name, INTERNAL, -1);
+  isolate->context_slot_cache()->Update(this, name, Variable::INTERNAL, -1);
   return -1;
 }
 
@@ -540,24 +513,16 @@ int SerializedScopeInfo::ParameterIndex(String* name) {
 }
 
 
-int SerializedScopeInfo::FunctionContextSlotIndex(String* name,
-                                                  VariableMode* mode) {
+int SerializedScopeInfo::FunctionContextSlotIndex(String* name) {
   ASSERT(name->IsSymbol());
   if (length() > 0) {
     Object** p = data_start();
     if (*p == name) {
       p = ContextEntriesAddr();
       int number_of_context_slots;
-      p = ReadInt(p, &number_of_context_slots);
+      ReadInt(p, &number_of_context_slots);
       ASSERT(number_of_context_slots != 0);
       // The function context slot is the last entry.
-      if (mode != NULL) {
-        // Seek to context slot entry.
-        p += (number_of_context_slots - 1) * 2;
-        // Seek to mode.
-        ++p;
-        ReadInt(p, mode);
-      }
       return number_of_context_slots + Context::MIN_CONTEXT_SLOTS - 1;
     }
   }
@@ -575,7 +540,7 @@ int ContextSlotCache::Hash(Object* data, String* name) {
 
 int ContextSlotCache::Lookup(Object* data,
                              String* name,
-                             VariableMode* mode) {
+                             Variable::Mode* mode) {
   int index = Hash(data, name);
   Key& key = keys_[index];
   if ((key.data == data) && key.name->Equals(name)) {
@@ -589,7 +554,7 @@ int ContextSlotCache::Lookup(Object* data,
 
 void ContextSlotCache::Update(Object* data,
                               String* name,
-                              VariableMode mode,
+                              Variable::Mode mode,
                               int slot_index) {
   String* symbol;
   ASSERT(slot_index > kNotFound);
@@ -616,7 +581,7 @@ void ContextSlotCache::Clear() {
 
 void ContextSlotCache::ValidateEntry(Object* data,
                                      String* name,
-                                     VariableMode mode,
+                                     Variable::Mode mode,
                                      int slot_index) {
   String* symbol;
   if (HEAP->LookupSymbolIfExists(name, &symbol)) {

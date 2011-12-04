@@ -177,7 +177,7 @@ void uv_pipe_open(uv_pipe_t* handle, uv_file fd) {
 }
 
 
-int uv_pipe_connect(uv_connect_t* req,
+void uv_pipe_connect(uv_connect_t* req,
                     uv_pipe_t* handle,
                     const char* name,
                     uv_connect_cb cb) {
@@ -209,7 +209,7 @@ int uv_pipe_connect(uv_connect_t* req,
   while (r == -1 && errno == EINTR);
 
   if (r == -1) {
-    uv__set_sys_error(handle->loop, errno);
+    status = errno;
     uv__close(sockfd);
     goto out;
   }
@@ -237,7 +237,6 @@ out:
    * return 0 and let the callback handle errors.
    */
   errno = saved_errno;
-  return 0;
 }
 
 
@@ -271,4 +270,9 @@ void uv__pipe_accept(EV_P_ ev_io* watcher, int revents) {
   }
 
   errno = saved_errno;
+}
+
+
+void uv_pipe_pending_instances(uv_pipe_t* handle, int count) {
+  return 0;
 }

@@ -117,21 +117,8 @@ void PreParser::CheckOctalLiteral(int beg_pos, int end_pos, bool* ok) {
 
 
 PreParser::Statement PreParser::ParseSourceElement(bool* ok) {
-  // (Ecma 262 5th Edition, clause 14):
-  // SourceElement:
-  //    Statement
-  //    FunctionDeclaration
-  //
-  // In harmony mode we allow additionally the following productions
-  // SourceElement:
-  //    LetDeclaration
-  //    ConstDeclaration
-
   switch (peek()) {
-    case i::Token::FUNCTION:
-      return ParseFunctionDeclaration(ok);
     case i::Token::LET:
-    case i::Token::CONST:
       return ParseVariableStatement(kSourceElement, ok);
     default:
       return ParseStatement(ok);
@@ -238,19 +225,8 @@ PreParser::Statement PreParser::ParseStatement(bool* ok) {
     case i::Token::TRY:
       return ParseTryStatement(ok);
 
-    case i::Token::FUNCTION: {
-      i::Scanner::Location start_location = scanner_->peek_location();
-      Statement statement = ParseFunctionDeclaration(CHECK_OK);
-      i::Scanner::Location end_location = scanner_->location();
-      if (strict_mode() || harmony_scoping_) {
-        ReportMessageAt(start_location.beg_pos, end_location.end_pos,
-                        "strict_function", NULL);
-        *ok = false;
-        return Statement::Default();
-      } else {
-        return statement;
-      }
-    }
+    case i::Token::FUNCTION:
+      return ParseFunctionDeclaration(ok);
 
     case i::Token::DEBUGGER:
       return ParseDebuggerStatement(ok);
@@ -295,10 +271,14 @@ PreParser::Statement PreParser::ParseBlock(bool* ok) {
   //
   Expect(i::Token::LBRACE, CHECK_OK);
   while (peek() != i::Token::RBRACE) {
-    if (harmony_scoping_) {
-      ParseSourceElement(CHECK_OK);
-    } else {
-      ParseStatement(CHECK_OK);
+    i::Scanner::Location start_location = scanner_->peek_location();
+    Statement statement = ParseSourceElement(CHECK_OK);
+    i::Scanner::Location end_location = scanner_->location();
+    if (strict_mode() && statement.IsFunctionDeclaration()) {
+      ReportMessageAt(start_location.beg_pos, end_location.end_pos,
+                      "strict_function", NULL);
+      *ok = false;
+      return Statement::Default();
     }
   }
   Expect(i::Token::RBRACE, ok);
@@ -314,7 +294,6 @@ PreParser::Statement PreParser::ParseVariableStatement(
 
   Statement result = ParseVariableDeclarations(var_context,
                                                NULL,
-                                               NULL,
                                                CHECK_OK);
   ExpectSemicolon(CHECK_OK);
   return result;
@@ -328,37 +307,15 @@ PreParser::Statement PreParser::ParseVariableStatement(
 // of 'for-in' loops.
 PreParser::Statement PreParser::ParseVariableDeclarations(
     VariableDeclarationContext var_context,
-    VariableDeclarationProperties* decl_props,
     int* num_decl,
     bool* ok) {
   // VariableDeclarations ::
   //   ('var' | 'const') (Identifier ('=' AssignmentExpression)?)+[',']
-  //
-  // The ES6 Draft Rev3 specifies the following grammar for const declarations
-  //
-  // ConstDeclaration ::
-  //   const ConstBinding (',' ConstBinding)* ';'
-  // ConstBinding ::
-  //   Identifier '=' AssignmentExpression
-  //
-  // TODO(ES6):
-  // ConstBinding ::
-  //   BindingPattern '=' AssignmentExpression
-  bool require_initializer = false;
+
   if (peek() == i::Token::VAR) {
     Consume(i::Token::VAR);
   } else if (peek() == i::Token::CONST) {
-    if (harmony_scoping_) {
-      if (var_context != kSourceElement &&
-          var_context != kForStatement) {
-        i::Scanner::Location location = scanner_->peek_location();
-        ReportMessageAt(location.beg_pos, location.end_pos,
-                        "unprotected_const", NULL);
-        *ok = false;
-        return Statement::Default();
-      }
-      require_initializer = true;
-    } else if (strict_mode()) {
+    if (strict_mode()) {
       i::Scanner::Location location = scanner_->peek_location();
       ReportMessageAt(location, "strict_const", NULL);
       *ok = false;
@@ -397,10 +354,9 @@ PreParser::Statement PreParser::ParseVariableDeclarations(
       return Statement::Default();
     }
     nvars++;
-    if (peek() == i::Token::ASSIGN || require_initializer) {
+    if (peek() == i::Token::ASSIGN) {
       Expect(i::Token::ASSIGN, CHECK_OK);
       ParseAssignmentExpression(var_context != kForStatement, CHECK_OK);
-      if (decl_props != NULL) *decl_props = kHasInitializers;
     }
   } while (peek() == i::Token::COMMA);
 
@@ -416,11 +372,18 @@ PreParser::Statement PreParser::ParseExpressionOrLabelledStatement(bool* ok) {
 
   Expression expr = ParseExpression(true, CHECK_OK);
   if (expr.IsRawIdentifier()) {
-    ASSERT(!expr.AsIdentifier().IsFutureReserved());
-    ASSERT(!strict_mode() || !expr.AsIdentifier().IsFutureStrictReserved());
-    if (peek() == i::Token::COLON) {
+    if (peek() == i::Token::COLON &&
+        (!strict_mode() || !expr.AsIdentifier().IsFutureReserved())) {
       Consume(i::Token::COLON);
-      return ParseStatement(ok);
+      i::Scanner::Location start_location = scanner_->peek_location();
+      Statement statement = ParseStatement(CHECK_OK);
+      if (strict_mode() && statement.IsFunctionDeclaration()) {
+        i::Scanner::Location end_location = scanner_->location();
+        ReportMessageAt(start_location.beg_pos, end_location.end_pos,
+                        "strict_function", NULL);
+        *ok = false;
+      }
+      return Statement::Default();
     }
     // Preparsing is disabled for extensions (because the extension details
     // aren't passed to lazily compiled functions), so we don't
@@ -550,7 +513,15 @@ PreParser::Statement PreParser::ParseSwitchStatement(bool* ok) {
       Expect(i::Token::DEFAULT, CHECK_OK);
       Expect(i::Token::COLON, CHECK_OK);
     } else {
-      ParseStatement(CHECK_OK);
+      i::Scanner::Location start_location = scanner_->peek_location();
+      Statement statement = ParseStatement(CHECK_OK);
+      if (strict_mode() && statement.IsFunctionDeclaration()) {
+        i::Scanner::Location end_location = scanner_->location();
+        ReportMessageAt(start_location.beg_pos, end_location.end_pos,
+                        "strict_function", NULL);
+        *ok = false;
+        return Statement::Default();
+      }
     }
     token = peek();
   }
@@ -595,14 +566,9 @@ PreParser::Statement PreParser::ParseForStatement(bool* ok) {
   if (peek() != i::Token::SEMICOLON) {
     if (peek() == i::Token::VAR || peek() == i::Token::CONST ||
         peek() == i::Token::LET) {
-      bool is_let = peek() == i::Token::LET;
       int decl_count;
-      VariableDeclarationProperties decl_props = kHasNoInitializers;
-      ParseVariableDeclarations(
-          kForStatement, &decl_props, &decl_count, CHECK_OK);
-      bool accept_IN = decl_count == 1 &&
-          !(is_let && decl_props == kHasInitializers);
-      if (peek() == i::Token::IN && accept_IN) {
+      ParseVariableDeclarations(kForStatement, &decl_count, CHECK_OK);
+      if (peek() == i::Token::IN && decl_count == 1) {
         Expect(i::Token::IN, CHECK_OK);
         ParseExpression(true, CHECK_OK);
         Expect(i::Token::RPAREN, CHECK_OK);
@@ -1384,11 +1350,8 @@ PreParser::Expression PreParser::ParseFunctionLiteral(bool* ok) {
 PreParser::Expression PreParser::ParseV8Intrinsic(bool* ok) {
   // CallRuntime ::
   //   '%' Identifier Arguments
+
   Expect(i::Token::MOD, CHECK_OK);
-  if (!allow_natives_syntax_) {
-    *ok = false;
-    return Expression::Default();
-  }
   ParseIdentifier(CHECK_OK);
   ParseArguments(ok);
 
@@ -1471,16 +1434,9 @@ PreParser::Identifier PreParser::ParseIdentifier(bool* ok) {
       ReportMessageAt(location.beg_pos, location.end_pos,
                       "reserved_word", NULL);
       *ok = false;
-      return GetIdentifierSymbol();
     }
-    case i::Token::FUTURE_STRICT_RESERVED_WORD:
-      if (strict_mode()) {
-        i::Scanner::Location location = scanner_->location();
-        ReportMessageAt(location.beg_pos, location.end_pos,
-                        "strict_reserved_word", NULL);
-        *ok = false;
-      }
       // FALLTHROUGH
+    case i::Token::FUTURE_STRICT_RESERVED_WORD:
     case i::Token::IDENTIFIER:
       return GetIdentifierSymbol();
     default:

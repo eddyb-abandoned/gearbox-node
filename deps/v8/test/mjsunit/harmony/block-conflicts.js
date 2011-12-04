@@ -25,7 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --harmony-scoping
+// Flags: --harmony-block-scoping
 
 // Test for conflicting variable bindings.
 
@@ -80,11 +80,6 @@ var letbinds = [ "let x",
                  "let x = function() {}",
                  "let x, y",
                  "let y, x",
-                 "const x = 0",
-                 "const x = undefined",
-                 "const x = function() {}",
-                 "const x = 2, y = 3",
-                 "const y = 4, x = 5",
                  ];
 var varbinds = [ "var x",
                  "var x = 0",
